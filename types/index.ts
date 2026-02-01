@@ -12,8 +12,18 @@ export interface StudyPlan {
   subject: string
   topics: string[]
   status: 'active' | 'completed' | 'paused'
+  description?: string
+  help_areas?: string[]
+  attachments?: PlanAttachment[]
   created_at: string
   updated_at: string
+}
+
+export interface PlanAttachment {
+  name: string
+  url: string
+  type: string
+  size: number
 }
 
 export interface CSECContent {
