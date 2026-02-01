@@ -44,13 +44,13 @@ export default function Dashboard() {
         }
 
         // Generate sample plans and store them
-        const samplePlans = [
+        const samplePlans: StudyPlan[] = [
           {
             id: 'plan_1',
             user_id: user.id,
             subject: 'Mathematics',
             topics: ['Algebra', 'Geometry', 'Trigonometry', 'Calculus'],
-            status: 'active',
+            status: 'active' as const,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
@@ -59,7 +59,7 @@ export default function Dashboard() {
             user_id: user.id,
             subject: 'English A',
             topics: ['Literature', 'Writing', 'Communication'],
-            status: 'active',
+            status: 'active' as const,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
