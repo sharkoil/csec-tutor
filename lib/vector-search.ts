@@ -1,21 +1,21 @@
 import { supabase } from './supabase'
 import OpenAI from 'openai'
 
-const openrouterApiKey = process.env.OPENROUTER_API_KEY
-
-// Use OpenRouter for vector embeddings
-const openai = new OpenAI({
-  apiKey: openrouterApiKey || process.env.OPENAI_API_KEY!,
-  baseURL: openrouterApiKey ? 'https://openrouter.ai/api/v1' : undefined,
-  defaultHeaders: openrouterApiKey ? {
-    'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-    'X-Title': process.env.NEXT_PUBLIC_APP_NAME || 'CSEC Tutor',
-  } : undefined
-})
+function getOpenAIClient() {
+  const openrouterApiKey = process.env.OPENROUTER_API_KEY
+  return new OpenAI({
+    apiKey: openrouterApiKey || process.env.OPENAI_API_KEY || 'dummy-key-for-build',
+    baseURL: openrouterApiKey ? 'https://openrouter.ai/api/v1' : undefined,
+    defaultHeaders: openrouterApiKey ? {
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      'X-Title': process.env.NEXT_PUBLIC_APP_NAME || 'CSEC Tutor',
+    } : undefined
+  })
+}
 
 export class VectorSearch {
   static async generateEmbedding(text: string): Promise<number[]> {
-    const response = await openai.embeddings.create({
+    const response = await getOpenAIClient().embeddings.create({
       model: 'text-embedding-3-small',
       input: text,
     })
