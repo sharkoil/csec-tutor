@@ -1,17 +1,17 @@
 import { VectorSearch } from './vector-search'
 import OpenAI from 'openai'
 
-const openrouterApiKey = process.env.OPENROUTER_API_KEY
-
-// Use OpenRouter for all AI operations
-const openai = new OpenAI({
-  apiKey: openrouterApiKey || process.env.OPENAI_API_KEY!,
-  baseURL: openrouterApiKey ? 'https://openrouter.ai/api/v1' : undefined,
-  defaultHeaders: openrouterApiKey ? {
-    'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-    'X-Title': process.env.NEXT_PUBLIC_APP_NAME || 'CSEC Tutor',
-  } : undefined
-})
+function getOpenAIClient() {
+  const openrouterApiKey = process.env.OPENROUTER_API_KEY
+  return new OpenAI({
+    apiKey: openrouterApiKey || process.env.OPENAI_API_KEY || 'dummy-key-for-build',
+    baseURL: openrouterApiKey ? 'https://openrouter.ai/api/v1' : undefined,
+    defaultHeaders: openrouterApiKey ? {
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      'X-Title': process.env.NEXT_PUBLIC_APP_NAME || 'CSEC Tutor',
+    } : undefined
+  })
+}
 
 export interface CoachingResponse {
   explanation: string
@@ -47,7 +47,7 @@ export class AICoach {
 
     const contextContent = relevantContent.map((item: { content: string }) => item.content).join('\n\n')
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4',
       messages: [
         {
@@ -98,7 +98,7 @@ export class AICoach {
 
     const contextContent = pastQuestions.map((item: { content: string }) => item.content).join('\n\n')
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4',
       messages: [
         {
@@ -147,7 +147,7 @@ export class AICoach {
 
     const contextContent = examContent.map((item: { content: string }) => item.content).join('\n\n')
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: 'gpt-4',
       messages: [
         {
