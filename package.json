@@ -6,21 +6,50 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "tsc --noEmit",
+    "download-content": "npx tsx scripts/download-content.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test-db": "npx tsx scripts/test-connection.ts",
+    "test-openrouter": "npx tsx scripts/test-openrouter.ts",
+    "populate-final": "npx tsx scripts/populate-final.ts",
+    "populate-demo": "npx tsx scripts/populate-demo.ts",
+    "demo-downloader": "npx tsx scripts/demo-downloader.ts",
+    "populate-db-openrouter": "npx tsx scripts/content-downloader-openrouter.ts",
+    "populate-db": "npm run download-content && echo 'Content populated successfully!'"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
+    "@supabase/supabase-js": "^2.93.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.2.3",
+    "lucide-react": "^0.563.0",
     "next": "16.1.6",
+    "openai": "^6.17.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^3.4.0",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "babel-jest": "^30.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }
