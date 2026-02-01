@@ -55,7 +55,7 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
           const savedProgress = storedProgress[key]
           return {
             id: `progress_${topic}`,
-            user_id: user.id,
+            user_id: user!.id,
             plan_id: planId,
             topic,
             coaching_completed: savedProgress?.coaching_completed || false,
