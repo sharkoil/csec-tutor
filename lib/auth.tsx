@@ -135,16 +135,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name,
           }
           
-          await supabase
-            .from('users')
-            .insert(newUser)
-            .then(() => {
-              setAuthState({ user: newUser, loading: false, error: null })
-            })
-            .catch(() => {
-              // Supabase insert failed, but mock user is still set
-              setAuthState({ user: mockUser, loading: false, error: null })
-            })
+          try {
+            await supabase.from('users').insert(newUser)
+            setAuthState({ user: newUser, loading: false, error: null })
+          } catch {
+            // Supabase insert failed, but mock user is still set
+            setAuthState({ user: mockUser, loading: false, error: null })
+          }
         }
       } catch (supabaseError) {
         // Supabase signup failed, but mock user will work for testing

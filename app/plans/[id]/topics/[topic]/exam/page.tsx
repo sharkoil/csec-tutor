@@ -386,7 +386,7 @@ export default function ExamPage({ params }: { params: Promise<{ id: string; top
           </Card>
         )}
 
-        {examStarted && !examCompleted && (
+        {examStarted && !examCompleted && examData && (
           <div className="space-y-6">
             {/* Timer and Status */}
             <div className="bg-white p-4 rounded-lg shadow-sm border">

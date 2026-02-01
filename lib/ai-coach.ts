@@ -45,7 +45,7 @@ export class AICoach {
     
     Use the provided context from CSEC materials to ensure accuracy and alignment with the curriculum.`
 
-    const contextContent = relevantContent.map(item => item.content).join('\n\n')
+    const contextContent = relevantContent.map((item: { content: string }) => item.content).join('\n\n')
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -62,7 +62,7 @@ export class AICoach {
       temperature: 0.7,
     })
 
-    const content = response.choices[0].message.content
+    const content = response.choices[0].message.content || ''
     
     return {
       explanation: this.extractSection(content, 'explanation'),
@@ -96,7 +96,7 @@ export class AICoach {
     4. Include suggested answers and marking schemes
     5. Reference question patterns from actual CSEC past papers`
 
-    const contextContent = pastQuestions.map(item => item.content).join('\n\n')
+    const contextContent = pastQuestions.map((item: { content: string }) => item.content).join('\n\n')
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -113,7 +113,7 @@ export class AICoach {
       temperature: 0.6,
     })
 
-    return response.choices[0].message.content
+    return response.choices[0].message.content || ''
   }
 
   static async generatePracticeExam(
@@ -145,7 +145,7 @@ export class AICoach {
     - Answer key and marking scheme
     - Format similar to actual CSEC examinations`
 
-    const contextContent = examContent.map(item => item.content).join('\n\n')
+    const contextContent = examContent.map((item: { content: string }) => item.content).join('\n\n')
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4',
@@ -163,7 +163,7 @@ export class AICoach {
     })
 
     return {
-      exam_content: response.choices[0].message.content,
+      exam_content: response.choices[0].message.content || '',
       duration,
       topics,
       total_marks: 100
