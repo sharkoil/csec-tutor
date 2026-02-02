@@ -1,25 +1,9 @@
 import { supabase } from './supabase'
-import OpenAI from 'openai'
-
-function getOpenAIClient() {
-  const openrouterApiKey = process.env.OPENROUTER_API_KEY
-  return new OpenAI({
-    apiKey: openrouterApiKey || process.env.OPENAI_API_KEY || 'dummy-key-for-build',
-    baseURL: openrouterApiKey ? 'https://openrouter.ai/api/v1' : undefined,
-    defaultHeaders: openrouterApiKey ? {
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      'X-Title': process.env.NEXT_PUBLIC_APP_NAME || 'CSEC Tutor',
-    } : undefined
-  })
-}
+import { generateEmbedding } from './embeddings'
 
 export class VectorSearch {
   static async generateEmbedding(text: string): Promise<number[]> {
-    const response = await getOpenAIClient().embeddings.create({
-      model: 'text-embedding-3-small',
-      input: text,
-    })
-    return response.data[0].embedding
+    return generateEmbedding(text)
   }
 
   static async addContent(content: {

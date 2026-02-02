@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS csec_content (
   content_type TEXT NOT NULL CHECK (content_type IN ('syllabus', 'question', 'explanation', 'example')),
   content TEXT NOT NULL,
   metadata JSONB DEFAULT '{}',
-  embedding vector(1536), -- OpenAI embedding dimension
+  embedding vector(512), -- Voyage AI / Jina embedding dimension
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -83,7 +83,7 @@ CREATE TRIGGER update_progress_updated_at BEFORE UPDATE ON progress
 
 -- Create search function for vector similarity
 CREATE OR REPLACE FUNCTION search_csec_content(
-  query_embedding vector(1536),
+  query_embedding vector(512),
   match_threshold float DEFAULT 0.7,
   match_count int DEFAULT 10
 )

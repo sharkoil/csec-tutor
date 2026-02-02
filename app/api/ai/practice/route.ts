@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { createClient } from '@supabase/supabase-js'
+import { generateEmbedding } from '@/lib/embeddings'
 
 function getOpenAIClient() {
   return new OpenAI({
@@ -10,6 +12,46 @@ function getOpenAIClient() {
       'X-Title': process.env.NEXT_PUBLIC_APP_NAME || 'CSEC Tutor',
     }
   })
+}
+
+// Get relevant CSEC questions and content using vector search
+async function getRelevantContent(subject: string, topic: string): Promise<string> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    
+    if (!supabaseUrl || supabaseUrl.includes('placeholder') || !supabaseKey) {
+      return ''
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    
+    // Generate embedding for the query
+    const query = `${subject} ${topic} CSEC past paper questions practice problems`
+    const embedding = await generateEmbedding(query)
+    
+    // Search for relevant content
+    const { data, error } = await supabase.rpc('search_csec_content', {
+      query_embedding: embedding,
+      match_threshold: 0.5,
+      match_count: 5
+    })
+    
+    if (error || !data || data.length === 0) {
+      return ''
+    }
+    
+    // Format the relevant content for the AI
+    const relevantContent = data
+      .filter((item: any) => item.subject === subject)
+      .map((item: any) => `[${item.content_type.toUpperCase()}] ${item.subtopic}:\n${item.content}`)
+      .join('\n\n---\n\n')
+    
+    return relevantContent
+  } catch (error) {
+    console.error('Vector search error:', error)
+    return ''
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -31,8 +73,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Retrieve relevant CSEC content from vector database
+    const relevantContent = await getRelevantContent(subject, topic)
+    
+    const contextSection = relevantContent 
+      ? `\n\nRELEVANT CSEC CONTENT AND PAST QUESTIONS:\n${relevantContent}\n\nUse the above content as reference for creating authentic CSEC-style questions.`
+      : ''
+
     const systemPrompt = `You are a CSEC examination question creator for ${subject}.
-Generate ${count} practice questions for the topic "${topic}" at ${difficulty} difficulty level.
+Generate ${count} practice questions for the topic "${topic}" at ${difficulty} difficulty level.${contextSection}
 
 You MUST respond with valid JSON in exactly this format:
 {
