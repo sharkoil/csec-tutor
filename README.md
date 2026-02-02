@@ -1,206 +1,139 @@
 # CSEC Tutor - AI-Powered Exam Preparation Platform
 
-A comprehensive web application for CSEC (Caribbean Secondary Education Certificate) exam preparation, featuring personalized lesson plans, AI-powered coaching, and practice exams based on official CSEC curriculum.
+An intelligent study companion for Caribbean students preparing for CSEC (Caribbean Secondary Education Certificate) examinations.
 
-## 🚀 Features
+## 🎯 The Problem
 
-- **Personalized Study Plans**: Create customized learning paths based on subjects and topics
-- **AI-Powered Coaching**: Get fundamental explanations and learning tips from AI
-- **Practice Questions**: Generate topic-specific questions based on past papers
-- **Practice Exams**: Take timed exams that simulate real CSEC conditions
-- **Progress Tracking**: Monitor your learning journey with detailed analytics
-- **CSEC Subjects**: Support for Mathematics, English A, Biology, Chemistry, Physics, and more
+Caribbean students preparing for CSEC exams face significant challenges:
 
-## 🏗️ Architecture
+- **Limited Access to Quality Tutoring**: Many students lack access to experienced tutors, especially in rural areas
+- **Generic Study Resources**: Existing materials don't adapt to individual learning needs or pace
+- **Outdated Practice Materials**: Finding current, curriculum-aligned practice questions is difficult
+- **No Personalized Feedback**: Students often don't understand *why* they got answers wrong
+- **Exam Anxiety**: Without proper preparation and practice, students enter exams underprepared
 
-- **Frontend**: Next.js 14 with TypeScript and Tailwind CSS
-- **Backend**: Supabase for database, authentication, and real-time features
-- **AI Integration**: OpenAI GPT-4 for content generation and embeddings
-- **Vector Search**: pgvector for semantic content retrieval
-- **Authentication**: Supabase Auth with secure user management
+## 💡 Our Solution
 
-## 📋 Prerequisites
+CSEC Tutor uses **AI to democratize access to quality exam preparation**. By combining the official CSEC curriculum with advanced AI technology, we provide:
 
-- Node.js 18+ 
-- npm or yarn
-- Supabase account
-- OpenAI API key
+- **Personalized AI tutoring** that adapts to each student's needs
+- **Curriculum-aligned content** pulled directly from CSEC syllabuses
+- **Intelligent practice questions** that mirror actual exam formats
+- **Instant, detailed feedback** that helps students learn from mistakes
+- **24/7 availability** — study whenever, wherever
 
-## 🛠️ Setup Instructions
+## 🤖 How We Use AI
 
-### 1. Clone and Install
+### Semantic Search with Vector Embeddings
+We convert CSEC syllabus content, past paper questions, and explanations into mathematical representations (embeddings) stored in a vector database. When a student asks a question or needs practice, we find the most relevant curriculum content using similarity search — ensuring every response is grounded in official CSEC material.
 
-```bash
-cd csec-tutor
-npm install
+### AI-Powered Coaching
+Using Claude (via OpenRouter), students receive:
+- **Concept explanations** tailored to CSEC requirements
+- **Step-by-step problem solving** with Caribbean context
+- **Personalized tips** based on common student difficulties
+- **Follow-up questions** to deepen understanding
+
+### Intelligent Question Generation
+The AI generates practice questions that:
+- Match the style and difficulty of actual CSEC papers
+- Cover specific topics the student is studying
+- Include detailed marking schemes and explanations
+- Adapt based on student performance
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **Personalized Study Plans** | Create customized learning paths for your target subjects and topics |
+| **AI Coaching Sessions** | Chat with an AI tutor that understands the CSEC curriculum |
+| **Practice Questions** | Generate unlimited topic-specific questions with instant feedback |
+| **Timed Practice Exams** | Simulate real CSEC exam conditions with auto-grading |
+| **Progress Tracking** | Monitor improvement across topics with detailed analytics |
+| **Multi-Subject Support** | Mathematics, English A, Biology, Chemistry, Physics, and more |
+
+## 📚 Supported CSEC Subjects
+
+- **Mathematics** — Algebra, Geometry, Statistics, Number Theory, Functions, Matrices
+- **English A** — Comprehension, Essay Writing, Grammar, Summary Writing
+- **Biology** — Cell Structure, Genetics, Ecology, Human Biology
+- **Chemistry** — Atomic Structure, Chemical Bonding, Organic Chemistry
+- **Physics** — Mechanics, Electricity, Waves, Thermal Physics
+- **Principles of Business** — Business Environment, Management, Finance
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js 18+
+- Supabase account (free tier works)
+- OpenRouter API key (for AI features)
+- Voyage AI API key (for embeddings — free 200M tokens/month)
+
+### Quick Setup
+
+1. **Clone and install**
+   ```bash
+   git clone https://github.com/sharkoil/csec-tutor.git
+   cd csec-tutor
+   npm install
+   ```
+
+2. **Configure environment** — Copy `.env.example` to `.env.local`:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+   OPENROUTER_API_KEY=your_openrouter_key
+   VOYAGE_API_KEY=your_voyage_key
+   ```
+
+3. **Set up the database** — Run the SQL in `database/schema.sql` in Supabase
+
+4. **Populate vector database** — See [VECTOR_DATABASE_SETUP.md](VECTOR_DATABASE_SETUP.md)
+
+5. **Start the app**
+   ```bash
+   npm run dev
+   ```
+
+## 📖 Documentation
+
+- [Vector Database Setup](VECTOR_DATABASE_SETUP.md) — How to set up semantic search
+- [OpenRouter Setup](OPENROUTER_SETUP.md) — Configure AI providers
+- [Database Schema](database/schema.sql) — Complete database structure
+
+## 🎓 User Journey
+
+```
+Sign Up → Create Study Plan → AI Coaching → Practice Questions → Practice Exam → Track Progress
 ```
 
-### 2. Environment Variables
+1. **Create an account** and set your target exam date
+2. **Build a study plan** by selecting subjects and topics
+3. **Learn fundamentals** through AI-powered coaching sessions
+4. **Practice with questions** that match CSEC exam style
+5. **Take mock exams** under timed conditions
+6. **Review progress** and focus on weak areas
 
-Copy `.env.example` to `.env.local` and fill in your credentials:
+## 🌍 Impact
 
-```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+Our goal is to **level the playing field** for Caribbean students:
 
-# OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key
-
-# App Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_APP_NAME=CSEC Tutor
-```
-
-### 3. Database Setup
-
-1. Create a new Supabase project
-2. Run the SQL schema from `database/schema.sql` in Supabase SQL editor
-3. This will create all necessary tables with proper indexes and RLS policies
-
-### 4. Start Development
-
-```bash
-npm run dev
-```
-
-Visit `http://localhost:3000` to see the application.
-
-## 📚 Database Schema
-
-The application uses the following main tables:
-
-- **users**: User profiles and authentication
-- **study_plans**: Individual study plans with subjects and topics
-- **csec_content**: Vectorized CSEC curriculum content and past papers
-- **progress**: User progress tracking for each topic
-
-## 🔧 Key Components
-
-### Authentication System
-- Secure sign-in/sign-up with email/password
-- Protected routes and user sessions
-- Profile management
-
-### Study Plan Creation
-- Subject selection from CSEC curriculum
-- Topic-based learning paths
-- Progress tracking
-
-### AI Coaching
-- Vector-powered content retrieval
-- Personalized explanations
-- CSEC-aligned examples
-
-### Practice System
-- Auto-generated questions based on curriculum
-- Multiple question types (MCQ, short answer, structured)
-- Instant feedback and scoring
-
-## 🎯 User Journey
-
-1. **Sign Up** → Create account
-2. **Create Study Plan** → Choose subject and topics
-3. **Fundamentals Coaching** → Learn core concepts
-4. **Practice Questions** → Test understanding
-5. **Practice Exam** → Final assessment
-6. **Progress Review** → Track improvement
-
-## 📖 CSEC Subjects Supported
-
-- Mathematics
-- English A
-- Biology
-- Chemistry
-- Physics
-- Principles of Business
-
-Each subject includes:
-- Official CSEC topics
-- Curriculum-aligned content
-- Past paper-style questions
-
-## 🔍 Content Processing (Future Enhancement)
-
-To populate the vector database with CSEC content:
-
-1. Download official CSEC syllabuses and past papers
-2. Process PDFs using OCR
-3. Extract questions, answers, and explanations
-4. Generate embeddings using OpenAI
-5. Store in vector database for semantic search
-
-## 🎨 UI Components
-
-Built with modern React components:
-- Responsive design with Tailwind CSS
-- Accessible form elements
-- Interactive progress indicators
-- Clean, educational interface
-
-## 🔐 Security Features
-
-- Row Level Security (RLS) on all tables
-- Secure API endpoints
-- Input validation and sanitization
-- Environment variable protection
-
-## 📊 Analytics and Tracking
-
-- Study plan completion rates
-- Topic-level progress
-- Practice exam scores
-- Learning time analytics
-
-## 🚀 Deployment
-
-### Vercel (Recommended)
-```bash
-npm run build
-npm start
-```
-
-### Docker
-```bash
-docker build -t csec-tutor .
-docker run -p 3000:3000 csec-tutor
-```
+- Make quality exam preparation accessible to all students, regardless of location or income
+- Reduce dependency on expensive private tutoring
+- Increase CSEC pass rates through better preparation
+- Build student confidence through consistent practice
 
 ## 🤝 Contributing
 
+We welcome contributions! Please:
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+3. Submit a pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+MIT License — see [LICENSE](LICENSE) for details.
 
-## 🆘 Support
+---
 
-For questions or issues:
-- Check the troubleshooting guide
-- Review documentation
-- Contact the development team
-
-## 🗺️ Roadmap
-
-- [ ] Mobile app development
-- [ ] Live video tutoring integration
-- [ ] Advanced analytics dashboard
-- [ ] Multi-language support
-- [ ] Offline functionality
-- [ ] Study group features
-
-## 🎓 Educational Impact
-
-This platform aims to:
-- Improve CSEC exam preparation
-- Provide personalized learning experiences
-- Make quality education accessible
-- Support Caribbean students' success
-
-Built with ❤️ for Caribbean students preparing for their CSEC examinations.
+**Built with ❤️ for Caribbean students preparing for CSEC examinations.**
