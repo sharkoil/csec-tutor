@@ -2,6 +2,13 @@ module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testMatch: ['**/*.test.{js,jsx,ts,tsx}'],
+  transform: {
+    '^.+\\.(ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }]
+  },
+  transformIgnorePatterns: [
+    '/node_modules/',
+    '^.+\\.module\\.(css|sass|scss)$'
+  ],
   collectCoverageFrom: [
     'components/**/*.{js,jsx,ts,tsx}',
     'lib/**/*.{js,jsx,ts,tsx}',
