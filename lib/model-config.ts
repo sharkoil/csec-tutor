@@ -8,10 +8,10 @@
 
 export const MODELS = {
   // Primary model for deep lesson content and diagnostics
-  LESSON: 'anthropic/claude-sonnet-4-20250514',
+  LESSON: 'anthropic/claude-sonnet-4',
   
   // Cheaper model for utility tasks (study guides, key points, checkpoints)
-  UTILITY: 'anthropic/claude-3.5-haiku',
+  UTILITY: 'anthropic/claude-3.5-sonnet',
   
   // Free fallback when paid credits are exhausted
   FREE_FALLBACK: 'openrouter/quasar-alpha',
