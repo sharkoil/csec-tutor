@@ -1,123 +1,62 @@
 /**
- * Embedding service with multiple provider options
- * Primary: Voyage AI (requires free API key - https://www.voyageai.com)
- * Fallback: Jina AI (requires API key - https://jina.ai)
- * Last resort: Deterministic pseudo-embedding for development
+ * Embedding service - Local-first with API fallbacks
  * 
- * To get free API keys:
- * - Voyage AI: https://dash.voyageai.com (200M tokens/month free)
- * - Jina AI: https://jina.ai/api-dashboard/key-manager
+ * Primary: Local embeddings via /api/embed (sentence-transformers all-MiniLM-L6-v2, 384-dim)
+ * Fallback: Deterministic pseudo-embedding for development
+ * 
+ * The local endpoint uses @xenova/transformers which is the same model
+ * used by bulk_populate_vectors.py, ensuring dimension compatibility.
  */
 
 // Local embeddings with sentence-transformers all-MiniLM-L6-v2 (384 dimensions)
-// API fallbacks (Voyage, Jina) are deprecated - use local Python script instead
 const DEFAULT_EMBEDDING_DIMENSION = 384
-
-// API endpoints
-const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
-const JINA_API_URL = 'https://api.jina.ai/v1/embeddings'
 
 export interface EmbeddingResult {
   embedding: number[]
   dimension: number
 }
 
+/**
+ * Get the base URL for API calls (works in both server and client contexts)
+ */
+function getBaseUrl(): string {
+  // Server-side: use localhost
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+  }
+  // Client-side: use relative URL
+  return ''
+}
+
 export async function generateEmbedding(text: string): Promise<number[]> {
   // Clean and truncate text
   const cleanText = text.trim().slice(0, 2000)
   
-  // Try Voyage AI first (best quality, generous free tier)
-  const voyageKey = process.env.VOYAGE_API_KEY
-  if (voyageKey) {
-    try {
-      const response = await fetch(VOYAGE_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${voyageKey}`
-        },
-        body: JSON.stringify({
-          model: 'voyage-3-lite',
-          input: [cleanText]
-        })
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        if (result.data && result.data[0] && result.data[0].embedding) {
-          return result.data[0].embedding
-        }
-      } else {
-        const errorText = await response.text()
-        console.warn('Voyage AI error:', response.status, errorText)
+  // Try local embedding endpoint first (matches stored vectors exactly)
+  try {
+    const baseUrl = getBaseUrl()
+    const response = await fetch(`${baseUrl}/api/embed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ text: cleanText })
+    })
+    
+    if (response.ok) {
+      const result = await response.json()
+      if (result.embedding && result.embedding.length === 384) {
+        return result.embedding
       }
-    } catch (error) {
-      console.warn('Voyage AI embedding failed:', error)
+    } else {
+      console.warn('Local embedding failed:', response.status)
     }
+  } catch (error) {
+    console.warn('Local embedding endpoint error:', error)
   }
   
-  // Try Jina AI as fallback
-  const jinaKey = process.env.JINA_API_KEY
-  if (jinaKey) {
-    try {
-      const response = await fetch(JINA_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${jinaKey}`
-        },
-        body: JSON.stringify({
-          model: 'jina-embeddings-v2-small-en',
-          input: [cleanText],
-          normalized: true
-        })
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        if (result.data && result.data[0] && result.data[0].embedding) {
-          return result.data[0].embedding
-        }
-      } else {
-        const errorText = await response.text()
-        console.warn('Jina AI error:', response.status, errorText)
-      }
-    } catch (error) {
-      console.warn('Jina AI embedding failed:', error)
-    }
-  }
-  
-  // Try HuggingFace as last API option
-  const hfToken = process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN
-  if (hfToken) {
-    try {
-      const response = await fetch(`https://api-inference.huggingface.co/models/BAAI/bge-small-en-v1.5`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${hfToken}`
-        },
-        body: JSON.stringify({
-          inputs: cleanText,
-          options: { wait_for_model: true }
-        })
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        const embedding = Array.isArray(result[0]) ? result[0] : result
-        if (Array.isArray(embedding) && embedding.length > 0) {
-          return embedding
-        }
-      }
-    } catch (error) {
-      console.warn('HuggingFace embedding failed:', error)
-    }
-  }
-  
-  // Last resort: deterministic pseudo-embedding for development
-  console.warn('No embedding API key available - using fallback pseudo-embedding')
-  console.warn('For production, add VOYAGE_API_KEY (free at https://dash.voyageai.com)')
+  // Fallback: deterministic pseudo-embedding
+  console.warn('Using fallback pseudo-embedding (local endpoint unavailable)')
   return generateFallbackEmbedding(cleanText)
 }
 
@@ -153,21 +92,34 @@ function generateFallbackEmbedding(text: string): number[] {
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  // Process in batches to avoid rate limits
-  const batchSize = 10
-  const results: number[][] = []
-  
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize)
-    const batchResults = await Promise.all(batch.map(generateEmbedding))
-    results.push(...batchResults)
+  // Try batch processing via local endpoint
+  try {
+    const baseUrl = getBaseUrl()
+    const cleanTexts = texts.map(t => t.trim().slice(0, 2000))
     
-    // Small delay between batches to respect rate limits
-    if (i + batchSize < texts.length) {
-      await new Promise(resolve => setTimeout(resolve, 200))
+    const response = await fetch(`${baseUrl}/api/embed`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ texts: cleanTexts })
+    })
+    
+    if (response.ok) {
+      const result = await response.json()
+      if (result.embeddings && result.embeddings.length === texts.length) {
+        return result.embeddings
+      }
     }
+  } catch (error) {
+    console.warn('Batch embedding failed, falling back to sequential:', error)
   }
   
+  // Fallback: process one at a time
+  const results: number[][] = []
+  for (const text of texts) {
+    results.push(await generateEmbedding(text))
+  }
   return results
 }
 
