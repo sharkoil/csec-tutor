@@ -6,17 +6,19 @@ This guide walks you through setting up the vector database in Supabase for the 
 
 The vector database enables semantic search across CSEC content, allowing the AI to retrieve relevant syllabus content, past paper questions, and explanations to provide more accurate, curriculum-aligned responses.
 
+**Embedding Model:** `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
+- Runs locally via Python - no API rate limits or costs
+- Fast and effective for semantic similarity
+
 ## Prerequisites
 
 1. A Supabase account (free tier works)
 2. Access to the Supabase SQL Editor
-3. A free embedding API key from one of these providers:
-   - **Voyage AI** (recommended): https://dash.voyageai.com - 200M tokens/month free
-   - **Jina AI**: https://jina.ai/api-dashboard/key-manager
+3. Python 3.9+ installed locally
 4. Your `.env.local` configured with:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `VOYAGE_API_KEY` or `JINA_API_KEY` (for embeddings)
+   - `SUPABASE_SERVICE_ROLE_KEY` (for bulk population)
 
 ## Step 1: Enable the pgvector Extension
 
@@ -43,7 +45,7 @@ CREATE TABLE IF NOT EXISTS csec_content (
   content_type TEXT NOT NULL CHECK (content_type IN ('syllabus', 'question', 'explanation', 'example')),
   content TEXT NOT NULL,
   metadata JSONB DEFAULT '{}',
-  embedding vector(512), -- Voyage AI / Jina embedding dimension
+  embedding vector(384), -- sentence-transformers all-MiniLM-L6-v2 dimension
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -82,7 +84,7 @@ This function performs vector similarity search:
 ```sql
 -- Create search function for vector similarity
 CREATE OR REPLACE FUNCTION search_csec_content(
-  query_embedding vector(512),
+  query_embedding vector(384),
   match_threshold float DEFAULT 0.5,
   match_count int DEFAULT 10
 )
@@ -135,7 +137,37 @@ CREATE POLICY "Service role can manage content" ON csec_content
 
 ## Step 6: Populate the Database with Content
 
-Run the population script to add CSEC content with embeddings:
+### Option A: Python Bulk Population (Recommended)
+
+Use the Python script to process PDFs locally with sentence-transformers:
+
+```bash
+cd csec-tutor/scripts
+pip install -r requirements.txt
+python bulk_populate_vectors.py
+```
+
+**Required folder structure:**
+```
+data/
+  past-papers/
+    mathematics/
+      CSEC-MATH-2019.pdf
+      CSEC-MATH-2020.pdf
+    biology/
+      ...
+  syllabi/
+    mathematics/
+      CSEC-Mathematics-Syllabus.pdf
+    biology/
+      ...
+```
+
+**System Dependencies (optional, for scanned PDFs):**
+- Tesseract OCR: https://github.com/tesseract-ocr/tesseract
+- Poppler: https://github.com/osminber/poppler-windows
+
+### Option B: TypeScript Population (Legacy)
 
 ```bash
 cd csec-tutor
@@ -148,7 +180,7 @@ Or use the npm script:
 npm run populate-vectors
 ```
 
-**Note:** The script uses Voyage AI for embeddings. With a free API key (200M tokens/month), expect ~21 second delays between items due to rate limits (3 requests/minute without payment method).
+**Note:** This method uses API-based embeddings and may have rate limits.
 
 ## Verification
 
@@ -199,7 +231,7 @@ Run Step 4 to create the search function.
 The pgvector extension isn't available. Ensure you're on a Supabase plan that supports extensions, or run Step 1.
 
 ### Embedding dimension mismatch
-Ensure the embedding dimension (512) matches what's in the database. Voyage AI's `voyage-3-lite` model produces 512-dimensional vectors.
+Ensure the embedding dimension (384) matches what's in the database. The `all-MiniLM-L6-v2` model produces 384-dimensional vectors.
 
 ### Empty search results
 1. Check that content exists: `SELECT COUNT(*) FROM csec_content WHERE embedding IS NOT NULL;`
@@ -242,7 +274,7 @@ CREATE TABLE IF NOT EXISTS csec_content (
   content_type TEXT NOT NULL CHECK (content_type IN ('syllabus', 'question', 'explanation', 'example')),
   content TEXT NOT NULL,
   metadata JSONB DEFAULT '{}',
-  embedding vector(512),
+  embedding vector(384),  -- sentence-transformers all-MiniLM-L6-v2
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -254,7 +286,7 @@ CREATE INDEX IF NOT EXISTS idx_csec_content_embedding ON csec_content USING hnsw
 
 -- 4. Create search function
 CREATE OR REPLACE FUNCTION search_csec_content(
-  query_embedding vector(512),
+  query_embedding vector(384),
   match_threshold float DEFAULT 0.5,
   match_count int DEFAULT 10
 )
@@ -298,3 +330,20 @@ CREATE POLICY "Service role can manage content" ON csec_content
 ```
 
 Copy and paste this entire block into the Supabase SQL Editor and run it.
+
+## Migration from 512-dim to 384-dim
+
+If you already have a `csec_content` table with 512-dim vectors, run the migration script:
+
+```bash
+# In Supabase SQL Editor, run:
+database/migrate-to-384-dim.sql
+```
+
+This will:
+1. Drop and recreate the search function
+2. Drop and recreate the vector index
+3. Truncate existing content (cannot convert dimensions in-place)
+4. Alter the column to vector(384)
+
+Then re-populate with the Python script.

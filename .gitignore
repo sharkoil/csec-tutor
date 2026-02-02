@@ -41,3 +41,7 @@ yarn-error.log*
 next-env.d.ts
 nul
 .vercel
+
+# large data files (PDFs for local processing only)
+data/past-papers/
+data/syllabi/

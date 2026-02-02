@@ -9,9 +9,9 @@
  * - Jina AI: https://jina.ai/api-dashboard/key-manager
  */
 
-// Variable dimension - Voyage voyage-3-lite is 512, Jina v2-small is 512
-// We'll store whatever dimension we get and handle it dynamically
-const DEFAULT_EMBEDDING_DIMENSION = 512
+// Local embeddings with sentence-transformers all-MiniLM-L6-v2 (384 dimensions)
+// API fallbacks (Voyage, Jina) are deprecated - use local Python script instead
+const DEFAULT_EMBEDDING_DIMENSION = 384
 
 // API endpoints
 const VOYAGE_API_URL = 'https://api.voyageai.com/v1/embeddings'
@@ -172,6 +172,6 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 }
 
 export const EMBEDDING_CONFIG = {
-  model: 'voyage-3-lite (512d) / jina-v2-small (512d)',
-  dimension: DEFAULT_EMBEDDING_DIMENSION
+  model: 'all-MiniLM-L6-v2 (sentence-transformers)',
+  dimension: DEFAULT_EMBEDDING_DIMENSION  // 384 dimensions
 }
