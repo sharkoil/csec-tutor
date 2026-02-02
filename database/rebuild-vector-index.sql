@@ -4,12 +4,13 @@
 -- Step 1: Drop the old (broken) index
 DROP INDEX IF EXISTS idx_csec_content_embedding;
 
--- Step 2: For ~94K rows, use lists = sqrt(94000) ≈ 307
--- IVFFlat needs lists roughly equal to sqrt(num_rows) for optimal performance
+-- Step 2: Use lists = 100 to fit in Supabase free tier memory (32MB)
+-- Fewer lists = less memory needed, slightly slower queries but still functional
+-- For ~94K rows, optimal is sqrt(94000) ≈ 307, but 100 works within memory limits
 CREATE INDEX idx_csec_content_embedding 
 ON csec_content 
 USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 300);
+WITH (lists = 100);
 
 -- Step 3: Analyze the table to update statistics
 ANALYZE csec_content;

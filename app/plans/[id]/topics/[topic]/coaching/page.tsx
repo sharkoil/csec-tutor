@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, Zap } from 'lucide-react'
+import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 // Enhanced CoachingResponse with narrative content and fallback info
@@ -200,6 +200,78 @@ function renderMarkdown(markdown: string): React.ReactNode {
   return elements
 }
 
+/**
+ * Split content into pages based on section headers (## or ###)
+ * Each major section becomes a page for easier reading
+ */
+function paginateContent(markdown: string): string[] {
+  if (!markdown) return []
+  
+  // Split by major headers (## level)
+  const sections = markdown.split(/(?=^## )/gm)
+  const pages: string[] = []
+  let currentPage = ''
+  
+  for (const section of sections) {
+    // If adding this section would make the page too long, start a new page
+    // Aim for roughly 800-1200 words per page
+    const wordCount = section.split(/\s+/).length
+    const currentWordCount = currentPage.split(/\s+/).length
+    
+    if (currentPage && currentWordCount + wordCount > 1000) {
+      pages.push(currentPage.trim())
+      currentPage = section
+    } else {
+      currentPage += '\n\n' + section
+    }
+  }
+  
+  if (currentPage.trim()) {
+    pages.push(currentPage.trim())
+  }
+  
+  // If we only have 1 page but it's very long, split by ### headers
+  if (pages.length === 1 && pages[0].split(/\s+/).length > 1200) {
+    const subSections = pages[0].split(/(?=^### )/gm)
+    const subPages: string[] = []
+    let subCurrentPage = ''
+    
+    for (const sub of subSections) {
+      const wordCount = sub.split(/\s+/).length
+      const currentWordCount = subCurrentPage.split(/\s+/).length
+      
+      if (subCurrentPage && currentWordCount + wordCount > 800) {
+        subPages.push(subCurrentPage.trim())
+        subCurrentPage = sub
+      } else {
+        subCurrentPage += '\n\n' + sub
+      }
+    }
+    
+    if (subCurrentPage.trim()) {
+      subPages.push(subCurrentPage.trim())
+    }
+    
+    return subPages.length > 1 ? subPages : pages
+  }
+  
+  return pages
+}
+
+// Loading messages for kids - encouraging and fun
+const LOADING_MESSAGES = [
+  { text: "Preparing your personalized lesson...", emoji: "📚" },
+  { text: "Getting you ready for success!", emoji: "🌟" },
+  { text: "Our AI tutor is crafting your content...", emoji: "🤖" },
+  { text: "Loading the best examples for you...", emoji: "💡" },
+  { text: "Making learning fun and easy...", emoji: "🎯" },
+  { text: "Almost there! Great things take time...", emoji: "⏳" },
+  { text: "Building your path to excellence...", emoji: "🏆" },
+  { text: "Connecting the dots for you...", emoji: "🔗" },
+  { text: "You're going to ace this topic!", emoji: "💪" },
+  { text: "Putting together something special...", emoji: "✨" },
+]
+
 export default function CoachingPage({ params }: { params: Promise<{ id: string; topic: string }> }) {
   const { id: planId, topic: encodedTopic } = use(params)
   const { user, loading } = useAuth()
@@ -209,7 +281,18 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [expandedExamples, setExpandedExamples] = useState<Set<number>>(new Set([0])) // First example expanded by default
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
   const topic = decodeURIComponent(encodedTopic)
+  
+  // Cycle through loading messages every 3 seconds
+  useEffect(() => {
+    if (!isGenerating) return
+    const interval = setInterval(() => {
+      setLoadingMessageIndex(prev => (prev + 1) % LOADING_MESSAGES.length)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [isGenerating])
 
   // Helper to get difficulty badge color
   const getDifficultyColor = (difficulty: string) => {
@@ -473,15 +556,45 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
         )}
 
         {isGenerating && (
-          <Card>
+          <Card className="overflow-hidden">
             <CardContent className="text-center py-12">
-              <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Generating Your Personalized Coaching
-              </h3>
-              <p className="text-gray-600">
-                Our AI is analyzing CSEC materials and creating content tailored for you...
-              </p>
+              <div className="relative">
+                {/* Animated spinner with pulse effect */}
+                <div className="relative mx-auto w-20 h-20 mb-6">
+                  <div className="absolute inset-0 rounded-full bg-blue-100 animate-ping opacity-25"></div>
+                  <div className="relative flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
+                    <Loader2 className="h-10 w-10 animate-spin text-white" />
+                  </div>
+                </div>
+                
+                {/* Animated message */}
+                <div className="h-20 flex flex-col items-center justify-center">
+                  <span className="text-4xl mb-3 animate-bounce">
+                    {LOADING_MESSAGES[loadingMessageIndex].emoji}
+                  </span>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2 transition-opacity duration-500">
+                    {LOADING_MESSAGES[loadingMessageIndex].text}
+                  </h3>
+                </div>
+                
+                {/* Progress dots */}
+                <div className="flex justify-center space-x-2 mt-4">
+                  {LOADING_MESSAGES.slice(0, 5).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        i === loadingMessageIndex % 5 
+                          ? 'bg-blue-600 scale-125' 
+                          : 'bg-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
+                
+                <p className="text-gray-500 text-sm mt-6">
+                  This usually takes 30-60 seconds for a complete lesson
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -503,31 +616,115 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </Card>
             )}
 
-            {/* NEW: Narrative Textbook Content */}
-            {coaching.narrativeContent && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <BookOpen className="h-6 w-6 text-blue-600" />
-                    <span>Complete Lesson: {topic}</span>
-                  </CardTitle>
-                  <CardDescription className="flex items-center space-x-2">
-                    <span>Comprehensive textbook-quality content for CSEC preparation</span>
-                    {coaching.model && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                        <Zap className="h-3 w-3 mr-1" />
-                        AI Generated
-                      </span>
+            {/* NEW: Narrative Textbook Content with Pagination */}
+            {coaching.narrativeContent && (() => {
+              const pages = paginateContent(coaching.narrativeContent)
+              const totalPages = pages.length
+              const showPagination = totalPages > 1
+              
+              return (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center space-x-2">
+                          <BookOpen className="h-6 w-6 text-blue-600" />
+                          <span>Complete Lesson: {topic}</span>
+                        </CardTitle>
+                        <CardDescription className="flex items-center space-x-2 mt-1">
+                          <span>Comprehensive textbook-quality content for CSEC preparation</span>
+                          {coaching.model && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                              <Zap className="h-3 w-3 mr-1" />
+                              AI Generated
+                            </span>
+                          )}
+                        </CardDescription>
+                      </div>
+                      {showPagination && (
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                          <span className="font-medium">Part {currentPage} of {totalPages}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Progress bar for pagination */}
+                    {showPagination && (
+                      <div className="mt-4">
+                        <div className="flex space-x-1">
+                          {Array.from({ length: totalPages }, (_, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setCurrentPage(i + 1)}
+                              className={`flex-1 h-2 rounded-full transition-all duration-300 ${
+                                i + 1 === currentPage 
+                                  ? 'bg-blue-600' 
+                                  : i + 1 < currentPage 
+                                    ? 'bg-green-500' 
+                                    : 'bg-gray-200 hover:bg-gray-300'
+                              }`}
+                              title={`Go to part ${i + 1}`}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex justify-between mt-1 text-xs text-gray-500">
+                          <span>Start</span>
+                          <span>Finish</span>
+                        </div>
+                      </div>
                     )}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="prose prose-lg max-w-none">
-                    {renderMarkdown(coaching.narrativeContent)}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="prose prose-lg max-w-none">
+                      {renderMarkdown(pages[currentPage - 1] || '')}
+                    </div>
+                    
+                    {/* Pagination Navigation */}
+                    {showPagination && (
+                      <div className="flex items-center justify-between mt-8 pt-6 border-t">
+                        <Button
+                          variant="outline"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className="flex items-center space-x-2"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          <span>Previous</span>
+                        </Button>
+                        
+                        <div className="flex items-center space-x-4">
+                          <span className="text-sm text-gray-600">
+                            📖 Part {currentPage} of {totalPages}
+                          </span>
+                        </div>
+                        
+                        <Button
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                          className="flex items-center space-x-2"
+                        >
+                          <span>{currentPage === totalPages ? 'Done!' : 'Next'}</span>
+                          {currentPage !== totalPages && <ChevronRight className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Encouraging message when on last page */}
+                    {showPagination && currentPage === totalPages && (
+                      <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200 text-center">
+                        <span className="text-2xl">🎉</span>
+                        <p className="text-green-800 font-medium mt-2">
+                          Great job! You've read through the entire lesson!
+                        </p>
+                        <p className="text-green-600 text-sm mt-1">
+                          Scroll down to mark this coaching complete and move to practice questions.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })()}
 
             {/* Legacy format: Pacing Notes - Show at top if available (only when no narrative content) */}
             {!coaching.narrativeContent && coaching.pacing_notes && (
