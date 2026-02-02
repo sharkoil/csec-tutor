@@ -3,12 +3,43 @@
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
-import { BookOpen, LogOut, Menu, X } from 'lucide-react'
-import { useState } from 'react'
+import { BookOpen, LogOut, Menu, X, Shield } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export function Navbar() {
   const { user, signOut } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user) return
+      
+      // Check if user email is admin
+      if (user.email === 'sharkoil@gmail.com') {
+        setIsAdmin(true)
+        return
+      }
+
+      // Check database for admin role
+      try {
+        const { data } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+        
+        if (data?.role === 'admin') {
+          setIsAdmin(true)
+        }
+      } catch (error) {
+        // Ignore errors, just don't show admin
+      }
+    }
+
+    checkAdminStatus()
+  }, [user])
 
   const handleSignOut = async () => {
     await signOut()
@@ -34,6 +65,12 @@ export function Navbar() {
           <div className="hidden md:flex items-center space-x-8">
             {user ? (
               <>
+                {isAdmin && (
+                  <Link href="/admin" className="flex items-center text-sm font-medium text-orange-600 hover:text-orange-700 transition-colors">
+                    <Shield className="h-4 w-4 mr-1" />
+                    Admin
+                  </Link>
+                )}
                 <span className="text-sm text-muted-foreground">
                   Welcome, <span className="font-semibold text-foreground">{user.email?.split('@')[0]}</span>
                 </span>
@@ -78,6 +115,14 @@ export function Navbar() {
                     Signed in as <span className="font-semibold text-foreground">{user.email}</span>
                   </p>
                 </div>
+                {isAdmin && (
+                  <Link href="/admin" className="block px-4 py-2 mb-2">
+                    <Button variant="outline" size="sm" className="w-full text-orange-600">
+                      <Shield className="h-4 w-4 mr-2" />
+                      Admin Dashboard
+                    </Button>
+                  </Link>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

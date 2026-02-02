@@ -1,5 +1,9 @@
 import { VectorSearch } from './vector-search'
+import { trackUsage, extractUsageFromResponse } from './usage-tracking'
 import OpenAI from 'openai'
+
+// Model to use for AI coaching
+const AI_MODEL = 'anthropic/claude-3.5-haiku'
 
 function getOpenAIClient() {
   const openrouterApiKey = process.env.OPENROUTER_API_KEY
@@ -47,8 +51,9 @@ export class AICoach {
 
     const contextContent = relevantContent.map((item: { content: string }) => item.content).join('\n\n')
 
+    const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: 'gpt-4',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -61,6 +66,12 @@ export class AICoach {
       ],
       temperature: 0.7,
     })
+    const latencyMs = Date.now() - startTime
+
+    // Track usage asynchronously
+    const usageRecord = extractUsageFromResponse(response, 'coaching', AI_MODEL, subject, topic)
+    usageRecord.latency_ms = latencyMs
+    trackUsage(usageRecord)
 
     const content = response.choices[0].message.content || ''
     
@@ -98,8 +109,9 @@ export class AICoach {
 
     const contextContent = pastQuestions.map((item: { content: string }) => item.content).join('\n\n')
 
+    const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: 'gpt-4',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -112,6 +124,12 @@ export class AICoach {
       ],
       temperature: 0.6,
     })
+    const latencyMs = Date.now() - startTime
+
+    // Track usage asynchronously
+    const usageRecord = extractUsageFromResponse(response, 'practice-questions', AI_MODEL, subject, topic)
+    usageRecord.latency_ms = latencyMs
+    trackUsage(usageRecord)
 
     return response.choices[0].message.content || ''
   }
@@ -147,8 +165,9 @@ export class AICoach {
 
     const contextContent = examContent.map((item: { content: string }) => item.content).join('\n\n')
 
+    const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: 'gpt-4',
+      model: AI_MODEL,
       messages: [
         {
           role: 'system',
@@ -161,6 +180,12 @@ export class AICoach {
       ],
       temperature: 0.5,
     })
+    const latencyMs = Date.now() - startTime
+
+    // Track usage asynchronously
+    const usageRecord = extractUsageFromResponse(response, 'practice-exam', AI_MODEL, subject, topics.join(', '))
+    usageRecord.latency_ms = latencyMs
+    trackUsage(usageRecord)
 
     return {
       exam_content: response.choices[0].message.content || '',
