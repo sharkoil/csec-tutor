@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getOpenRouterCredits, getRecentUsage } from '@/lib/usage-tracking'
+import { getOpenRouterCredits } from '@/lib/usage-tracking'
 import { cookies } from 'next/headers'
 
+// Admin Dashboard API - v1.0.1
 // Admin emails that have access
 const ADMIN_EMAILS = ['sharkoil@gmail.com']
 
