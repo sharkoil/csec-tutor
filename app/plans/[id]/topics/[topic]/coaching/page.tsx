@@ -6,10 +6,10 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
-// Enhanced CoachingResponse with graduated examples and writing guidance
+// Enhanced CoachingResponse with narrative content and fallback info
 interface GraduatedExample {
   difficulty: 'easy' | 'easy-medium' | 'medium' | 'medium-hard' | 'hard'
   problem: string
@@ -38,6 +38,166 @@ interface CoachingResponse {
   graduated_examples?: GraduatedExample[]
   writing_guidance?: WritingGuidance
   pacing_notes?: string
+  // New textbook format fields
+  narrativeContent?: string
+  model?: string
+  isFallback?: boolean
+}
+
+/**
+ * Simple markdown renderer that handles headers, bold, italic, lists, and code blocks
+ */
+function renderMarkdown(markdown: string): React.ReactNode {
+  if (!markdown) return null
+  
+  const lines = markdown.split('\n')
+  const elements: React.ReactNode[] = []
+  let inCodeBlock = false
+  let codeContent: string[] = []
+  let listItems: string[] = []
+  let listType: 'ul' | 'ol' | null = null
+
+  const flushList = () => {
+    if (listItems.length > 0 && listType) {
+      const ListTag = listType === 'ol' ? 'ol' : 'ul'
+      elements.push(
+        <ListTag key={`list-${elements.length}`} className={listType === 'ol' ? 'list-decimal list-inside space-y-2 my-4' : 'list-disc list-inside space-y-2 my-4'}>
+          {listItems.map((item, i) => (
+            <li key={i} className="text-gray-700">{formatInline(item)}</li>
+          ))}
+        </ListTag>
+      )
+      listItems = []
+      listType = null
+    }
+  }
+
+  const formatInline = (text: string): React.ReactNode => {
+    // Handle bold **text** and __text__
+    let formatted = text
+    const parts: React.ReactNode[] = []
+    let lastIndex = 0
+    
+    // Bold pattern
+    const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g
+    let match
+    let processedText = text
+    
+    while ((match = boldRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index))
+      }
+      parts.push(<strong key={match.index}>{match[1] || match[2]}</strong>)
+      lastIndex = match.index + match[0].length
+    }
+    
+    if (parts.length > 0) {
+      if (lastIndex < text.length) {
+        parts.push(text.slice(lastIndex))
+      }
+      return parts
+    }
+    
+    // Italic pattern
+    const italicRegex = /\*(.+?)\*|_(.+?)_/g
+    while ((match = italicRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index))
+      }
+      parts.push(<em key={match.index}>{match[1] || match[2]}</em>)
+      lastIndex = match.index + match[0].length
+    }
+    
+    if (parts.length > 0) {
+      if (lastIndex < text.length) {
+        parts.push(text.slice(lastIndex))
+      }
+      return parts
+    }
+    
+    return text
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    
+    // Code block handling
+    if (line.startsWith('```')) {
+      if (inCodeBlock) {
+        elements.push(
+          <pre key={`code-${i}`} className="bg-gray-100 p-4 rounded-lg overflow-x-auto my-4 text-sm font-mono">
+            <code>{codeContent.join('\n')}</code>
+          </pre>
+        )
+        codeContent = []
+        inCodeBlock = false
+      } else {
+        flushList()
+        inCodeBlock = true
+      }
+      continue
+    }
+    
+    if (inCodeBlock) {
+      codeContent.push(line)
+      continue
+    }
+
+    // Headers
+    if (line.startsWith('### ')) {
+      flushList()
+      elements.push(<h3 key={i} className="text-xl font-bold text-gray-900 mt-8 mb-4">{formatInline(line.slice(4))}</h3>)
+    } else if (line.startsWith('## ')) {
+      flushList()
+      elements.push(<h2 key={i} className="text-2xl font-bold text-gray-900 mt-10 mb-4 pb-2 border-b">{formatInline(line.slice(3))}</h2>)
+    } else if (line.startsWith('# ')) {
+      flushList()
+      elements.push(<h1 key={i} className="text-3xl font-bold text-gray-900 mt-6 mb-6">{formatInline(line.slice(2))}</h1>)
+    }
+    // Unordered list
+    else if (line.match(/^[-*]\s+/)) {
+      if (listType !== 'ul') {
+        flushList()
+        listType = 'ul'
+      }
+      listItems.push(line.replace(/^[-*]\s+/, ''))
+    }
+    // Ordered list
+    else if (line.match(/^\d+\.\s+/)) {
+      if (listType !== 'ol') {
+        flushList()
+        listType = 'ol'
+      }
+      listItems.push(line.replace(/^\d+\.\s+/, ''))
+    }
+    // Blockquote
+    else if (line.startsWith('> ')) {
+      flushList()
+      elements.push(
+        <blockquote key={i} className="border-l-4 border-blue-500 pl-4 py-2 my-4 italic text-gray-600 bg-blue-50">
+          {formatInline(line.slice(2))}
+        </blockquote>
+      )
+    }
+    // Horizontal rule
+    else if (line.match(/^[-*_]{3,}$/)) {
+      flushList()
+      elements.push(<hr key={i} className="my-8 border-gray-300" />)
+    }
+    // Empty line
+    else if (line.trim() === '') {
+      flushList()
+    }
+    // Regular paragraph
+    else {
+      flushList()
+      elements.push(<p key={i} className="text-gray-700 leading-relaxed mb-4">{formatInline(line)}</p>)
+    }
+  }
+  
+  flushList() // Flush any remaining list
+  
+  return elements
 }
 
 export default function CoachingPage({ params }: { params: Promise<{ id: string; topic: string }> }) {
@@ -328,8 +488,49 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
 
         {coaching && (
           <div className="space-y-6">
-            {/* Pacing Notes - Show at top if available */}
-            {coaching.pacing_notes && (
+            {/* Fallback Mode Warning Banner */}
+            {coaching.isFallback && (
+              <Card className="border-amber-300 bg-amber-50">
+                <CardContent className="flex items-center space-x-3 py-4">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-amber-800 font-medium">Using Free AI Model</p>
+                    <p className="text-amber-700 text-sm">
+                      Our premium credits are temporarily exhausted. Content quality may vary slightly.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* NEW: Narrative Textbook Content */}
+            {coaching.narrativeContent && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <BookOpen className="h-6 w-6 text-blue-600" />
+                    <span>Complete Lesson: {topic}</span>
+                  </CardTitle>
+                  <CardDescription className="flex items-center space-x-2">
+                    <span>Comprehensive textbook-quality content for CSEC preparation</span>
+                    {coaching.model && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                        <Zap className="h-3 w-3 mr-1" />
+                        AI Generated
+                      </span>
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose prose-lg max-w-none">
+                    {renderMarkdown(coaching.narrativeContent)}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Legacy format: Pacing Notes - Show at top if available (only when no narrative content) */}
+            {!coaching.narrativeContent && coaching.pacing_notes && (
               <Card className="border-blue-200 bg-blue-50">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
@@ -350,28 +551,30 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </Card>
             )}
 
-            {/* Explanation Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <BookOpen className="h-5 w-5 text-blue-600" />
-                  <span>Core Concepts</span>
-                </CardTitle>
-                <CardDescription>
-                  Deep understanding of {topic} fundamentals
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="prose prose-sm max-w-none">
-                  {coaching.explanation.split('\n').map((paragraph, index) => (
-                    <p key={index} className="mb-3">{paragraph}</p>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Legacy format: Explanation Card (only when no narrative content) */}
+            {!coaching.narrativeContent && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <BookOpen className="h-5 w-5 text-blue-600" />
+                    <span>Core Concepts</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Deep understanding of {topic} fundamentals
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose prose-sm max-w-none">
+                    {coaching.explanation.split('\n').map((paragraph, index) => (
+                      <p key={index} className="mb-3">{paragraph}</p>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Graduated Examples - For STEM subjects */}
-            {coaching.graduated_examples && coaching.graduated_examples.length > 0 && (
+            {/* Graduated Examples - For STEM subjects (legacy format) */}
+            {!coaching.narrativeContent && coaching.graduated_examples && coaching.graduated_examples.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
@@ -470,8 +673,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </Card>
             )}
 
-            {/* Writing Guidance - For humanities subjects */}
-            {coaching.writing_guidance && (
+            {/* Writing Guidance - For humanities subjects (legacy format) */}
+            {!coaching.narrativeContent && coaching.writing_guidance && (
               <>
                 {/* Essay Structure */}
                 <Card>
@@ -581,8 +784,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </>
             )}
 
-            {/* Regular Examples (fallback for when graduated_examples not available) */}
-            {(!coaching.graduated_examples || coaching.graduated_examples.length === 0) && coaching.examples.length > 0 && (
+            {/* Regular Examples (legacy fallback for when graduated_examples not available) */}
+            {!coaching.narrativeContent && (!coaching.graduated_examples || coaching.graduated_examples.length === 0) && coaching.examples.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
@@ -614,8 +817,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </Card>
             )}
 
-            {/* Key Points Card */}
-            {coaching.key_points.length > 0 && (
+            {/* Key Points Card (legacy format) */}
+            {!coaching.narrativeContent && coaching.key_points.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
@@ -639,8 +842,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </Card>
             )}
 
-            {/* Practice Tips Card */}
-            {coaching.practice_tips.length > 0 && (
+            {/* Practice Tips Card (legacy format) */}
+            {!coaching.narrativeContent && coaching.practice_tips.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">

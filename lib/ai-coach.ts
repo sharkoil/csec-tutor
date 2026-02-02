@@ -1,11 +1,18 @@
 import { VectorSearch } from './vector-search'
 import { trackUsage, extractUsageFromResponse } from './usage-tracking'
+import { MODELS, callWithFallback, getOpenRouterCredits } from './model-config'
 import OpenAI from 'openai'
 
-// Use Sonnet for deep, comprehensive coaching content
-const AI_MODEL = 'anthropic/claude-sonnet-4-20250514'
+/**
+ * AI Coach - Generates deep textbook-quality lessons for CSEC topics
+ * 
+ * Uses tiered model selection:
+ * - LESSON tier (Claude Sonnet 4): Main narrative content
+ * - UTILITY tier (Claude Haiku): Study guides, key points (lazy-loaded)
+ * - Falls back to free model when credits exhausted
+ */
 
-// Subject classification for tailored coaching
+// Subject classification for tailored content  
 const STEM_SUBJECTS = ['Mathematics', 'Biology', 'Chemistry', 'Physics']
 const WRITING_SUBJECTS = ['English A', 'English B', 'History', 'Geography', 'Social Studies', 'Principles of Business']
 
@@ -29,6 +36,37 @@ function isWritingSubject(subject: string): boolean {
   return WRITING_SUBJECTS.some(s => subject.toLowerCase().includes(s.toLowerCase()))
 }
 
+/**
+ * TextbookLesson - Deep narrative lesson (2000-2500 words)
+ * This is the primary output format for coaching content
+ */
+export interface TextbookLesson {
+  // Main narrative content in markdown (2000-2500 words)
+  content: string
+  // Model used to generate (for display/tracking)
+  model: string
+  // Whether fallback model was used
+  isFallback: boolean
+  // Generation timestamp
+  generatedAt: string
+  // Subject and topic for caching
+  subject: string
+  topic: string
+}
+
+/**
+ * StudyGuide - Lazy-loaded supplementary content (generated with cheaper model)
+ */
+export interface StudyGuide {
+  keyPoints: string[]
+  quickReference: string
+  practiceCheckpoints: string[]
+  examTips: string[]
+}
+
+/**
+ * Legacy interface for backward compatibility
+ */
 export interface CoachingResponse {
   explanation: string
   examples: string[]
@@ -38,6 +76,10 @@ export interface CoachingResponse {
   graduated_examples?: GraduatedExample[]
   writing_guidance?: WritingGuidance
   pacing_notes?: string
+  // New textbook fields
+  narrativeContent?: string
+  model?: string
+  isFallback?: boolean
 }
 
 export interface GraduatedExample {
@@ -71,6 +113,353 @@ export interface SampleParagraph {
 }
 
 export class AICoach {
+  /**
+   * Generate deep textbook-quality lesson (2000-2500 words)
+   * This is the PRIMARY method for generating coaching content.
+   * Uses callWithFallback for automatic free model fallback on credit exhaustion.
+   */
+  static async generateTextbookLesson(
+    subject: string,
+    topic: string
+  ): Promise<TextbookLesson> {
+    // Get relevant curriculum context
+    const relevantContent = await VectorSearch.searchSimilarContent(
+      `${subject} ${topic} CSEC syllabus concepts explanations examples past papers`,
+      subject,
+      topic,
+      'explanation',
+      8
+    )
+    const contextContent = relevantContent.map((item: { content: string }) => item.content).join('\n\n---\n\n')
+
+    // Select appropriate prompt based on subject type
+    const prompt = this.getTextbookPrompt(subject, topic, contextContent)
+    
+    const openai = getOpenAIClient()
+    const startTime = Date.now()
+
+    // Use callWithFallback for automatic retry with free model on 402
+    const { result: response, model, isFallback } = await callWithFallback(
+      async (modelToUse) => {
+        return await openai.chat.completions.create({
+          model: modelToUse,
+          messages: [
+            { role: 'system', content: prompt.system },
+            { role: 'user', content: prompt.user }
+          ],
+          temperature: 0.7,
+          max_tokens: 6000, // Allow for 2000-2500 word lessons
+        })
+      },
+      'lesson' // Use LESSON tier
+    )
+    
+    const latencyMs = Date.now() - startTime
+
+    // Track usage
+    const usageRecord = extractUsageFromResponse(response, 'textbook-lesson', model, subject, topic)
+    usageRecord.latency_ms = latencyMs
+    trackUsage(usageRecord)
+
+    const content = response.choices[0].message.content || ''
+
+    return {
+      content,
+      model,
+      isFallback,
+      generatedAt: new Date().toISOString(),
+      subject,
+      topic
+    }
+  }
+
+  /**
+   * Generate the textbook-style prompt based on subject type
+   */
+  private static getTextbookPrompt(subject: string, topic: string, contextContent: string): { system: string; user: string } {
+    const contextSection = contextContent 
+      ? `\n\n## OFFICIAL CSEC CURRICULUM CONTEXT\nUse this content to ground your lesson in the actual syllabus:\n\n${contextContent}`
+      : ''
+
+    if (isSTEMSubject(subject)) {
+      return this.getSTEMTextbookPrompt(subject, topic, contextSection)
+    } else if (isWritingSubject(subject)) {
+      return this.getWritingTextbookPrompt(subject, topic, contextSection)
+    } else {
+      return this.getGeneralTextbookPrompt(subject, topic, contextSection)
+    }
+  }
+
+  /**
+   * STEM textbook prompt - focuses on mathematical/scientific reasoning
+   */
+  private static getSTEMTextbookPrompt(subject: string, topic: string, contextSection: string): { system: string; user: string } {
+    const system = `You are a master ${subject} educator writing a chapter of a comprehensive CSEC preparation textbook. Your writing should be engaging, thorough, and designed to build DEEP understanding—not superficial memorization.
+
+## YOUR MISSION
+Write a complete lesson on "${topic}" that could stand alone as a textbook chapter. This lesson should be 2000-2500 words of flowing, pedagogically sound content.
+
+## STRUCTURE YOUR LESSON AS FOLLOWS
+
+### 1. OPENING HOOK (1-2 paragraphs)
+Start with something that makes students CARE about this topic:
+- A real-world Caribbean application
+- A thought-provoking question
+- A common misconception to address
+- A historical story about the development of this concept
+
+### 2. BUILDING THE FOUNDATION (3-4 paragraphs)
+Develop the core concepts from first principles:
+- Don't just state definitions—explain WHY they matter
+- Build from simpler ideas to more complex ones
+- Use analogies Caribbean students can relate to
+- Address the intuition behind the mathematics/science
+
+### 3. WORKED EXAMPLES (The Heart of Your Lesson)
+Provide 5 progressively challenging worked examples. Each should feel like a natural continuation of the narrative, not a disconnected problem. Format each as:
+
+**Example 1: [Descriptive Title]** _(Confidence Builder)_
+[Present the problem in context]
+_Solution:_ Walk through each step, explaining your thinking. Don't just show what to do—explain why.
+_Key Insight:_ What principle does this reinforce?
+
+**Example 2: [Descriptive Title]** _(Building Skills)_
+...continue the progression...
+
+**Example 3: [Descriptive Title]** _(CSEC Exam Level)_
+This should match typical CSEC difficulty.
+
+**Example 4: [Descriptive Title]** _(Challenge Level)_
+Multi-step or application problem.
+
+**Example 5: [Descriptive Title]** _(Distinction Level)_
+The kind of problem that separates excellent students.
+
+### 4. COMMON PITFALLS (2-3 paragraphs)
+Discuss mistakes students commonly make with this topic:
+- Why students make these mistakes
+- How to recognize when you're falling into these traps
+- Strategies to avoid them
+
+### 5. CONNECTING THE DOTS (1-2 paragraphs)
+- How does this topic connect to other areas of ${subject}?
+- Where will students see these concepts again in the CSEC syllabus?
+- Real-world applications in Caribbean context
+
+### 6. SELF-CHECK QUESTIONS (Brief section)
+Provide 3-4 questions students can use to test their understanding. Include answers in parentheses.
+
+## WRITING STYLE
+- Write in second person ("you") to engage the reader directly
+- Use clear, accessible language—avoid unnecessary jargon
+- When technical terms are necessary, explain them
+- Include encouragement—remind students they CAN master this
+- Format mathematics clearly using proper notation${contextSection}`
+
+    const user = `Write a complete 2000-2500 word textbook lesson on "${topic}" in CSEC ${subject}. 
+
+This should be a flowing, narrative lesson—not a bulleted outline. Write it as if you're explaining directly to a student who needs to truly understand this topic for their CSEC examination.
+
+Output the lesson in clean Markdown format.`
+
+    return { system, user }
+  }
+
+  /**
+   * Writing/Humanities textbook prompt - focuses on essay structure and content
+   */
+  private static getWritingTextbookPrompt(subject: string, topic: string, contextSection: string): { system: string; user: string } {
+    const system = `You are a master ${subject} educator writing a chapter of a comprehensive CSEC preparation textbook. Your writing should be engaging, thorough, and designed to help students both UNDERSTAND the content and EXPRESS that understanding effectively on exams.
+
+## YOUR MISSION
+Write a complete lesson on "${topic}" that could stand alone as a textbook chapter. This lesson should be 2000-2500 words covering both the CONTENT and HOW TO WRITE ABOUT IT.
+
+## STRUCTURE YOUR LESSON AS FOLLOWS
+
+### 1. OPENING ENGAGEMENT (1-2 paragraphs)
+Draw students into the topic:
+- Why does this matter for Caribbean students?
+- Connect to current events or students' lived experiences
+- Frame the key questions this topic addresses
+
+### 2. UNDERSTANDING THE CONTENT (4-5 paragraphs)
+Provide thorough coverage of what students need to KNOW:
+- Key facts, dates, concepts, and their significance
+- Important figures, events, or theories
+- Context that deepens understanding
+- Different perspectives or interpretations
+- Caribbean-specific angles when relevant
+
+### 3. HOW CSEC TESTS THIS (2 paragraphs)
+- What types of questions appear on this topic?
+- What are examiners looking for?
+- Common mark allocations and what they mean
+
+### 4. ESSAY WRITING MASTERCLASS
+
+**The Art of Introduction** (1-2 paragraphs + template)
+Explain how to open a response on this topic. Provide a fill-in template students can adapt.
+
+**Building Your Argument** (2-3 paragraphs)
+- How to structure body paragraphs (PEEL method)
+- What evidence works best for ${topic}
+- How to analyze rather than just describe
+
+**Sample Body Paragraph** (Write a complete, annotated example)
+Show students exactly what a strong paragraph looks like on this topic. Annotate it to explain why it works.
+
+**Concluding with Impact** (1 paragraph + example)
+How to end responses effectively.
+
+### 5. THE EVIDENCE TOOLKIT
+Provide 8-10 specific facts, examples, quotes, or case studies students can use when writing about ${topic}. For each, explain when and how to use it.
+
+### 6. COMMON MISTAKES TO AVOID (2 paragraphs)
+- What loses marks on this topic
+- How to avoid being too vague or too descriptive
+
+### 7. SELF-CHECK
+3-4 potential essay questions with brief notes on how to approach each.
+
+## WRITING STYLE
+- Write in second person ("you") to engage directly
+- Be practical and actionable—students should finish feeling equipped to tackle any question
+- Include model phrases and templates they can adapt
+- Balance content knowledge with writing skills${contextSection}`
+
+    const user = `Write a complete 2000-2500 word textbook lesson on "${topic}" in CSEC ${subject}.
+
+This should be a flowing, narrative lesson that teaches both CONTENT and WRITING SKILLS. Write it as if you're preparing a student to tackle any possible exam question on this topic.
+
+Output the lesson in clean Markdown format.`
+
+    return { system, user }
+  }
+
+  /**
+   * General textbook prompt for other subjects
+   */
+  private static getGeneralTextbookPrompt(subject: string, topic: string, contextSection: string): { system: string; user: string } {
+    const system = `You are a master ${subject} educator writing a chapter of a comprehensive CSEC preparation textbook. Your writing should be engaging, thorough, and designed to build DEEP understanding.
+
+## YOUR MISSION
+Write a complete lesson on "${topic}" that could stand alone as a textbook chapter. This lesson should be 2000-2500 words of flowing, pedagogically sound content.
+
+## STRUCTURE YOUR LESSON
+
+### 1. ENGAGING INTRODUCTION (1-2 paragraphs)
+Hook students with relevance to Caribbean life or a compelling question.
+
+### 2. CORE CONCEPTS (4-5 paragraphs)
+Build understanding from the ground up:
+- Explain concepts thoroughly, not just definitions
+- Use examples and analogies
+- Connect ideas to each other
+- Address common misconceptions
+
+### 3. APPLICATIONS & EXAMPLES
+Provide 4-5 worked examples or case studies that illustrate the concepts. Progress from simpler to more complex. Explain your reasoning throughout.
+
+### 4. CONNECTIONS
+- How does this connect to other parts of the ${subject} syllabus?
+- Real-world applications
+
+### 5. EXAM FOCUS
+- What types of questions appear on this topic?
+- Key facts/concepts to memorize
+- Common mistakes to avoid
+
+### 6. SELF-CHECK
+3-4 questions for students to test their understanding.
+
+## WRITING STYLE
+- Write in second person ("you")
+- Be thorough but accessible
+- Encourage the reader
+- Use Markdown formatting${contextSection}`
+
+    const user = `Write a complete 2000-2500 word textbook lesson on "${topic}" in CSEC ${subject}.
+
+This should read like a textbook chapter—flowing narrative that truly teaches the topic. Output in Markdown format.`
+
+    return { system, user }
+  }
+
+  /**
+   * Generate study guide (key points, quick reference) using cheaper model
+   * This is lazy-loaded on demand to save costs
+   */
+  static async generateStudyGuide(
+    subject: string,
+    topic: string
+  ): Promise<StudyGuide> {
+    const openai = getOpenAIClient()
+    const startTime = Date.now()
+
+    const { result: response, model, isFallback } = await callWithFallback(
+      async (modelToUse) => {
+        return await openai.chat.completions.create({
+          model: modelToUse,
+          messages: [
+            { 
+              role: 'system', 
+              content: `You are creating a concise study guide for CSEC ${subject} students. Output JSON only.`
+            },
+            { 
+              role: 'user', 
+              content: `Create a study guide for "${topic}" in ${subject}. Return ONLY valid JSON:
+{
+  "keyPoints": ["Point 1", "Point 2", ... (8-10 essential points to memorize)],
+  "quickReference": "A 2-3 sentence summary of the most critical concept",
+  "practiceCheckpoints": ["Checkpoint question 1", "Checkpoint question 2", ... (4-5 self-test questions)],
+  "examTips": ["Tip 1", "Tip 2", ... (4-5 exam-specific tips)]
+}`
+            }
+          ],
+          temperature: 0.5,
+          max_tokens: 1500,
+        })
+      },
+      'utility' // Use UTILITY tier (Haiku - cheaper)
+    )
+
+    const latencyMs = Date.now() - startTime
+    const usageRecord = extractUsageFromResponse(response, 'study-guide', model, subject, topic)
+    usageRecord.latency_ms = latencyMs
+    trackUsage(usageRecord)
+
+    const content = response.choices[0].message.content || '{}'
+    try {
+      const jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      return JSON.parse(jsonStr)
+    } catch {
+      return {
+        keyPoints: [],
+        quickReference: content.substring(0, 200),
+        practiceCheckpoints: [],
+        examTips: []
+      }
+    }
+  }
+
+  /**
+   * Check current credit status
+   */
+  static async getCreditStatus(): Promise<{ hasCredits: boolean; remaining: number; isFallbackMode: boolean }> {
+    const credits = await getOpenRouterCredits()
+    if (!credits) {
+      return { hasCredits: true, remaining: 0, isFallbackMode: false }
+    }
+    const threshold = 0.10
+    return {
+      hasCredits: credits.remaining >= threshold,
+      remaining: credits.remaining,
+      isFallbackMode: credits.remaining < threshold
+    }
+  }
+
+  // ============ LEGACY METHODS (kept for backward compatibility) ============
+  
   /**
    * Generate comprehensive, deep coaching content tailored to subject type.
    * - STEM subjects: 5 graduated difficulty examples with step-by-step solutions
@@ -176,7 +565,7 @@ Remember: These students are preparing for the most important exams of their aca
 
     const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: AI_MODEL,
+      model: MODELS.LESSON,
       messages: [
         { role: 'system', content: systemPrompt },
         {
@@ -189,7 +578,7 @@ Remember: These students are preparing for the most important exams of their aca
     })
     const latencyMs = Date.now() - startTime
 
-    const usageRecord = extractUsageFromResponse(response, 'stem-coaching', AI_MODEL, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'stem-coaching', MODELS.LESSON, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -300,7 +689,7 @@ Remember: Many students struggle with written exams not because they don't know 
 
     const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: AI_MODEL,
+      model: MODELS.LESSON,
       messages: [
         { role: 'system', content: systemPrompt },
         {
@@ -313,7 +702,7 @@ Remember: Many students struggle with written exams not because they don't know 
     })
     const latencyMs = Date.now() - startTime
 
-    const usageRecord = extractUsageFromResponse(response, 'writing-coaching', AI_MODEL, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'writing-coaching', MODELS.LESSON, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -364,7 +753,7 @@ How to spread learning across multiple sessions.`
 
     const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: AI_MODEL,
+      model: MODELS.LESSON,
       messages: [
         { role: 'system', content: systemPrompt },
         {
@@ -377,7 +766,7 @@ How to spread learning across multiple sessions.`
     })
     const latencyMs = Date.now() - startTime
 
-    const usageRecord = extractUsageFromResponse(response, 'general-coaching', AI_MODEL, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'general-coaching', MODELS.LESSON, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -532,7 +921,7 @@ How to spread learning across multiple sessions.`
 
     const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: AI_MODEL,
+      model: MODELS.LESSON,
       messages: [
         {
           role: 'system',
@@ -548,7 +937,7 @@ How to spread learning across multiple sessions.`
     const latencyMs = Date.now() - startTime
 
     // Track usage asynchronously
-    const usageRecord = extractUsageFromResponse(response, 'practice-questions', AI_MODEL, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'practice-questions', MODELS.LESSON, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -588,7 +977,7 @@ How to spread learning across multiple sessions.`
 
     const startTime = Date.now()
     const response = await getOpenAIClient().chat.completions.create({
-      model: AI_MODEL,
+      model: MODELS.LESSON,
       messages: [
         {
           role: 'system',
@@ -604,7 +993,7 @@ How to spread learning across multiple sessions.`
     const latencyMs = Date.now() - startTime
 
     // Track usage asynchronously
-    const usageRecord = extractUsageFromResponse(response, 'practice-exam', AI_MODEL, subject, topics.join(', '))
+    const usageRecord = extractUsageFromResponse(response, 'practice-exam', MODELS.LESSON, subject, topics.join(', '))
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
