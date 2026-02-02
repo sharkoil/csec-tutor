@@ -11,7 +11,7 @@ export const MODELS = {
   LESSON: 'anthropic/claude-sonnet-4',
   
   // Cheaper model for utility tasks (study guides, key points, checkpoints)
-  UTILITY: 'anthropic/claude-3.5-sonnet',
+  UTILITY: 'anthropic/claude-3.5-haiku',
   
   // Free fallback when paid credits are exhausted
   FREE_FALLBACK: 'openrouter/quasar-alpha',
