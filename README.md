@@ -28,11 +28,17 @@ CSEC Tutor uses **AI to democratize access to quality exam preparation**. By com
 We convert CSEC syllabus content, past paper questions, and explanations into mathematical representations (embeddings) stored in a vector database. When a student asks a question or needs practice, we find the most relevant curriculum content using similarity search — ensuring every response is grounded in official CSEC material.
 
 ### AI-Powered Coaching
-Using Claude (via OpenRouter), students receive:
-- **Concept explanations** tailored to CSEC requirements
-- **Step-by-step problem solving** with Caribbean context
-- **Personalized tips** based on common student difficulties
-- **Follow-up questions** to deepen understanding
+Using Claude Sonnet 4 (via OpenRouter), students receive:
+- **Deep textbook-quality lessons** — 2000-2500 word narrative chapters that explain concepts thoroughly
+- **Curriculum-grounded content** — Lessons incorporate official CSEC syllabus material via vector search
+- **Subject-specific pedagogy** — STEM subjects get worked examples; humanities get essay writing guidance
+- **Tiered model selection** — Premium models for lessons, cheaper models for utilities to optimize costs
+- **Automatic fallback** — Switches to free AI model when paid credits are exhausted
+
+### Smart Cost Optimization
+- **Lesson caching** — Generated lessons are saved; repeat views don't use AI credits
+- **Tiered models** — Claude Sonnet 4 for main content, Claude Haiku for study guides
+- **Free fallback** — Automatically uses free model when credits run low ($0.10 threshold)
 
 ### Intelligent Question Generation
 The AI generates practice questions that:
@@ -46,10 +52,12 @@ The AI generates practice questions that:
 | Feature | Description |
 |---------|-------------|
 | **Personalized Study Plans** | Create customized learning paths for your target subjects and topics |
+| **Deep Textbook Lessons** | AI generates 2000+ word narrative lessons like textbook chapters |
 | **AI Coaching Sessions** | Chat with an AI tutor that understands the CSEC curriculum |
 | **Practice Questions** | Generate unlimited topic-specific questions with instant feedback |
 | **Timed Practice Exams** | Simulate real CSEC exam conditions with auto-grading |
 | **Progress Tracking** | Monitor improvement across topics with detailed analytics |
+| **Admin Dashboard** | Track API credits, user stats, and AI usage at `/admin` |
 | **Multi-Subject Support** | Mathematics, English A, Biology, Chemistry, Physics, and more |
 
 ## 📚 Supported CSEC Subjects
@@ -104,12 +112,12 @@ The AI generates practice questions that:
 ## 🎓 User Journey
 
 ```
-Sign Up → Create Study Plan → AI Coaching → Practice Questions → Practice Exam → Track Progress
+Sign Up → Create Study Plan → Study Textbook Lessons → Practice Questions → Practice Exam → Track Progress
 ```
 
 1. **Create an account** and set your target exam date
 2. **Build a study plan** by selecting subjects and topics
-3. **Learn fundamentals** through AI-powered coaching sessions
+3. **Study deep lessons** — AI generates comprehensive textbook-quality chapters
 4. **Practice with questions** that match CSEC exam style
 5. **Take mock exams** under timed conditions
 6. **Review progress** and focus on weak areas
