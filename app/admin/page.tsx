@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, RefreshCw, DollarSign, Zap, Clock, BarChart3 } from 'lucide-react'
+import { ArrowLeft, RefreshCw, DollarSign, Zap, Clock, BarChart3, Users, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 
 interface UsageStats {
@@ -35,6 +35,20 @@ interface UsageStats {
     latency_ms: number
     created_at: string
   }>
+  user_stats: {
+    total_users: number
+    total_plans: number
+    active_plans: number
+    users_with_plans: number
+    per_user_usage: Array<{
+      user_id: string
+      email: string
+      plans: number
+      requests: number
+      tokens: number
+      cost: number
+    }>
+  }
 }
 
 export default function AdminDashboard() {
@@ -159,6 +173,69 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* User & Plan Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-blue-700">Total Users</CardTitle>
+              <Users className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-900">
+                {stats?.user_stats?.total_users || 0}
+              </div>
+              <p className="text-xs text-blue-600">
+                {stats?.user_stats?.users_with_plans || 0} with study plans
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-purple-700">Study Plans</CardTitle>
+              <BookOpen className="h-4 w-4 text-purple-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-900">
+                {stats?.user_stats?.total_plans || 0}
+              </div>
+              <p className="text-xs text-purple-600">
+                {stats?.user_stats?.active_plans || 0} active
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-green-700">OpenRouter Credits</CardTitle>
+              <DollarSign className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-900">
+                {formatCost(remainingCredits)}
+              </div>
+              <p className="text-xs text-green-600">
+                {formatCost(stats?.credits.total_usage || 0)} used of {formatCost(stats?.credits.total_credits || 0)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-orange-700">AI Requests</CardTitle>
+              <Zap className="h-4 w-4 text-orange-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-900">
+                {stats?.stats.total_requests || 0}
+              </div>
+              <p className="text-xs text-orange-600">
+                {formatTokens(stats?.stats.total_tokens || 0)} tokens used
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
@@ -333,6 +410,42 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Per-User Usage */}
+        {(stats?.user_stats?.per_user_usage?.length || 0) > 0 && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Usage By User</CardTitle>
+              <CardDescription>Top users by AI cost this period</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 px-2">User</th>
+                      <th className="text-right py-2 px-2">Plans</th>
+                      <th className="text-right py-2 px-2">Requests</th>
+                      <th className="text-right py-2 px-2">Tokens</th>
+                      <th className="text-right py-2 px-2">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats?.user_stats?.per_user_usage?.map((user) => (
+                      <tr key={user.user_id} className="border-b hover:bg-gray-50">
+                        <td className="py-2 px-2 font-mono text-xs">{user.email}</td>
+                        <td className="py-2 px-2 text-right">{user.plans}</td>
+                        <td className="py-2 px-2 text-right">{user.requests}</td>
+                        <td className="py-2 px-2 text-right">{formatTokens(user.tokens)}</td>
+                        <td className="py-2 px-2 text-right font-medium">{formatCost(user.cost)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>

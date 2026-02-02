@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-// Admin Dashboard API - v1.0.2
+// Admin Dashboard API - v1.1.0 - Added user/plan tracking
 // Admin emails that have access
 const ADMIN_EMAILS = ['sharkoil@gmail.com']
 
@@ -63,6 +63,13 @@ export async function GET(request: NextRequest) {
       daily_breakdown: [] as Array<{ date: string; requests: number; tokens: number; cost: number }>
     }
     let recentUsage: any[] = []
+    let userStats = {
+      total_users: 0,
+      total_plans: 0,
+      active_plans: 0,
+      users_with_plans: 0,
+      per_user_usage: [] as Array<{ user_id: string; email: string; plans: number; requests: number; tokens: number; cost: number }>
+    }
 
     // Try to fetch from database if configured
     if (supabase) {
@@ -126,6 +133,68 @@ export async function GET(request: NextRequest) {
       } catch (dbError) {
         console.warn('Could not fetch ai_usage table:', dbError)
       }
+
+      // Fetch user and plan statistics
+      try {
+        // Get total users from Supabase Auth
+        const { count: userCount } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true })
+        userStats.total_users = userCount || 0
+
+        // Get plans stats
+        const { data: plansData } = await supabase
+          .from('study_plans')
+          .select('user_id, status')
+        
+        if (plansData) {
+          userStats.total_plans = plansData.length
+          userStats.active_plans = plansData.filter(p => p.status === 'active').length
+          const uniqueUsersWithPlans = new Set(plansData.map(p => p.user_id))
+          userStats.users_with_plans = uniqueUsersWithPlans.size
+        }
+
+        // Get per-user usage from ai_usage table
+        const { data: userUsageData } = await supabase
+          .from('ai_usage')
+          .select('user_id, total_tokens, cost_credits')
+          .gte('created_at', startDate.toISOString())
+        
+        if (userUsageData && userUsageData.length > 0) {
+          const userAgg: Record<string, { requests: number; tokens: number; cost: number }> = {}
+          
+          for (const record of userUsageData) {
+            const uid = record.user_id || 'anonymous'
+            if (!userAgg[uid]) {
+              userAgg[uid] = { requests: 0, tokens: 0, cost: 0 }
+            }
+            userAgg[uid].requests++
+            userAgg[uid].tokens += record.total_tokens || 0
+            userAgg[uid].cost += record.cost_credits || 0
+          }
+
+          // Get plan counts per user
+          const userPlans: Record<string, number> = {}
+          if (plansData) {
+            for (const plan of plansData) {
+              const uid = plan.user_id || 'anonymous'
+              userPlans[uid] = (userPlans[uid] || 0) + 1
+            }
+          }
+
+          userStats.per_user_usage = Object.entries(userAgg)
+            .map(([user_id, data]) => ({
+              user_id,
+              email: user_id === 'anonymous' ? 'Anonymous' : user_id.substring(0, 8) + '...',
+              plans: userPlans[user_id] || 0,
+              ...data
+            }))
+            .sort((a, b) => b.cost - a.cost)
+            .slice(0, 20)
+        }
+      } catch (userError) {
+        console.warn('Could not fetch user stats:', userError)
+      }
     }
 
     // Fetch OpenRouter credits
@@ -142,7 +211,8 @@ export async function GET(request: NextRequest) {
         period: { start: startDate.toISOString(), end: endDate.toISOString(), days },
         credits: credits || { total_credits: 0, total_usage: 0 },
         stats,
-        recent_usage: recentUsage
+        recent_usage: recentUsage,
+        user_stats: userStats
       }
     })
   } catch (error) {

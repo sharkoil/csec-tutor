@@ -1,6 +1,30 @@
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Create ai_usage table for tracking inference costs
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID,
+  generation_id TEXT,
+  model TEXT NOT NULL,
+  action TEXT NOT NULL,
+  subject TEXT,
+  topic TEXT,
+  prompt_tokens INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_credits DECIMAL(12, 8) NOT NULL DEFAULT 0,
+  latency_ms INTEGER,
+  cached_tokens INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for ai_usage
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user_id ON ai_usage(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_created_at ON ai_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_action ON ai_usage(action);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_model ON ai_usage(model);
+
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
