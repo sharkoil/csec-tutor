@@ -148,7 +148,7 @@ Or use the npm script:
 npm run populate-vectors
 ```
 
-**Note:** The script uses HuggingFace's free API for embeddings (no API key required for moderate usage).
+**Note:** The script uses Voyage AI for embeddings. With a free API key (200M tokens/month), expect ~21 second delays between items due to rate limits (3 requests/minute without payment method).
 
 ## Verification
 
@@ -199,7 +199,7 @@ Run Step 4 to create the search function.
 The pgvector extension isn't available. Ensure you're on a Supabase plan that supports extensions, or run Step 1.
 
 ### Embedding dimension mismatch
-Ensure the embedding dimension (384) matches what's used in the code. The HuggingFace BGE-small model produces 384-dimensional vectors.
+Ensure the embedding dimension (512) matches what's in the database. Voyage AI's `voyage-3-lite` model produces 512-dimensional vectors.
 
 ### Empty search results
 1. Check that content exists: `SELECT COUNT(*) FROM csec_content WHERE embedding IS NOT NULL;`
