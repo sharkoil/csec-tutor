@@ -696,16 +696,25 @@ Key Rules:
 ]
 
 async function populateContent() {
-  console.log('Starting CSEC content population...\n')
+  console.log('Starting CSEC content population...')
+  console.log('Note: 21 second delay between items due to Voyage AI rate limits (3 RPM)')
+  console.log('')
   
   const allContent = [...CSEC_MATHEMATICS_CONTENT, ...CSEC_ENGLISH_CONTENT]
+  const totalItems = allContent.length
+  const estimatedMinutes = Math.ceil((totalItems * 21) / 60)
+  console.log(`Total items: ${totalItems}`)
+  console.log(`Estimated time: ~${estimatedMinutes} minutes\n`)
+  
   let successCount = 0
   let errorCount = 0
+  let itemIndex = 0
   
   for (const item of allContent) {
+    itemIndex++
     try {
       // Generate embedding for the content
-      console.log(`Processing: ${item.subject} - ${item.topic} - ${item.subtopic} (${item.content_type})`)
+      console.log(`[${itemIndex}/${totalItems}] ${item.subject} - ${item.topic} - ${item.subtopic} (${item.content_type})`)
       
       const embedding = await generateEmbedding(item.content)
       
@@ -730,8 +739,12 @@ async function populateContent() {
         successCount++
       }
       
-      // Small delay to avoid rate limits
-      await new Promise(resolve => setTimeout(resolve, 300))
+      // 21 second delay to respect Voyage AI rate limit (3 RPM without payment method)
+      // Skip delay on last item
+      if (itemIndex < totalItems) {
+        console.log('  Waiting 21 seconds for rate limit...')
+        await new Promise(resolve => setTimeout(resolve, 21000))
+      }
       
     } catch (error) {
       console.error(`  ERROR: ${error instanceof Error ? error.message : 'Unknown error'}`)
