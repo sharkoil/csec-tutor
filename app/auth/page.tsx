@@ -55,31 +55,6 @@ export default function AuthPage() {
               onToggleMode={() => setMode(mode === 'signin' ? 'signup' : 'signin')} 
             />
           </div>
-
-          {/* Mode toggle info */}
-          <div className="text-center text-sm text-muted-foreground">
-            {mode === 'signin' ? (
-              <>
-                Don't have an account?{' '}
-                <button
-                  onClick={() => setMode('signup')}
-                  className="font-semibold text-primary hover:text-primary/80 transition-colors"
-                >
-                  Create one
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{' '}
-                <button
-                  onClick={() => setMode('signin')}
-                  className="font-semibold text-primary hover:text-primary/80 transition-colors"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
         </div>
       </div>
 
