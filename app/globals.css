@@ -209,4 +209,104 @@
   .gradient-text {
     @apply bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent;
   }
+
+  /* ============================================
+   * LESSON QUESTION CARD SYSTEM
+   * Premium styling for AI-generated question layouts
+   * ============================================ */
+
+  /* Question card — the outer container */
+  .lesson-question-card {
+    @apply transition-all duration-200;
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+
+  .lesson-question-card:hover {
+    @apply shadow-md;
+    transform: translateY(-1px);
+  }
+
+  /* Answer card styling */
+  .lesson-answer-card {
+    @apply transition-all duration-200;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  /* Insight card styling */
+  .lesson-insight-card {
+    @apply transition-all duration-200;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  /* Step number circles in worked examples */
+  .lesson-step-card {
+    @apply transition-all duration-200;
+  }
+
+  .lesson-step-card:hover {
+    @apply bg-blue-50 rounded-lg;
+  }
+
+  /* MCQ option hover state */
+  .lesson-mcq-option {
+    @apply transition-all duration-150;
+    cursor: default;
+  }
+
+  .lesson-mcq-option:hover {
+    @apply bg-blue-50;
+  }
+
+  .lesson-mcq-option:hover span:first-child {
+    @apply bg-blue-200 border-blue-400 text-blue-800;
+  }
+
+  /* Prose-level spacing for lesson content */
+  .prose-lesson {
+    font-size: 0.95rem;
+    line-height: 1.75;
+    letter-spacing: 0.01em;
+  }
+
+  .prose-lesson h2 {
+    @apply text-2xl font-bold mt-10 mb-4 pb-2 border-b border-gray-200 text-gray-900;
+  }
+
+  .prose-lesson h3 {
+    @apply text-xl font-bold mt-8 mb-4 text-gray-900;
+  }
+
+  .prose-lesson h4 {
+    @apply text-lg font-semibold mt-6 mb-3 text-gray-800;
+  }
+
+  .prose-lesson p {
+    @apply mb-4 text-gray-700 leading-relaxed;
+  }
+
+  .prose-lesson ul, .prose-lesson ol {
+    @apply my-4 space-y-2;
+  }
+
+  .prose-lesson li {
+    @apply text-gray-700 leading-relaxed;
+  }
+
+  /* Table styling for lesson content */
+  .prose-lesson table {
+    @apply w-full my-6 text-sm border-collapse;
+  }
+
+  .prose-lesson table th {
+    @apply bg-gray-50 font-semibold text-left px-4 py-2 border border-gray-200;
+  }
+
+  .prose-lesson table td {
+    @apply px-4 py-2 border border-gray-200;
+  }
+
+  .prose-lesson table tr:hover td {
+    @apply bg-gray-50;
+  }
 }

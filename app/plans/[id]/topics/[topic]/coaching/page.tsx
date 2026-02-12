@@ -46,7 +46,11 @@ interface CoachingResponse {
 }
 
 /**
- * Simple markdown renderer that handles headers, bold, italic, lists, and code blocks
+ * Premium markdown renderer with question format detection
+ * 
+ * Detects the Question Format Library patterns (blockquote-based questions,
+ * answer cards, worked examples, comparisons) and renders them as styled
+ * interactive cards. Falls back to standard markdown for non-question content.
  */
 function renderMarkdown(markdown: string): React.ReactNode {
   if (!markdown) return null
@@ -57,6 +61,7 @@ function renderMarkdown(markdown: string): React.ReactNode {
   let codeContent: string[] = []
   let listItems: string[] = []
   let listType: 'ul' | 'ol' | null = null
+  let blockquoteLines: string[] = []
 
   const flushList = () => {
     if (listItems.length > 0 && listType) {
@@ -64,7 +69,7 @@ function renderMarkdown(markdown: string): React.ReactNode {
       elements.push(
         <ListTag key={`list-${elements.length}`} className={listType === 'ol' ? 'list-decimal list-inside space-y-2 my-4' : 'list-disc list-inside space-y-2 my-4'}>
           {listItems.map((item, i) => (
-            <li key={i} className="text-gray-700">{formatInline(item)}</li>
+            <li key={i} className="text-gray-700 leading-relaxed">{formatInline(item)}</li>
           ))}
         </ListTag>
       )
@@ -73,42 +78,293 @@ function renderMarkdown(markdown: string): React.ReactNode {
     }
   }
 
+  /**
+   * Detect what kind of question card a blockquote represents
+   */
+  const detectBlockquoteType = (content: string): 'mcq' | 'truefalse' | 'fillin' | 'shortanswer' | 'error' | 'rewrite' | 'worked' | 'practice-set' | 'extended' | 'comparison' | 'plain' => {
+    const lower = content.toLowerCase()
+    if (lower.includes('**worked example') || lower.includes('**problem:') && lower.includes('**step 1:')) return 'worked'
+    if (lower.includes('**practice problem 1') || lower.includes('📋 **answer key')) return 'practice-set'
+    if (lower.includes('❌ **incorrect:') && lower.includes('✅ **correct:')) return 'comparison'
+    if (lower.includes('*(multiple choice') || (lower.includes('- (a)') && lower.includes('- (b)'))) return 'mcq'
+    if (lower.includes('*(true or false)') || lower.includes('*(true/false)')) return 'truefalse'
+    if (lower.includes('*(fill in the blank)') || lower.includes('______')) return 'fillin'
+    if (lower.includes('*(error identification)') || lower.includes('find and correct')) return 'error'
+    if (lower.includes('*(rewrite)') || lower.includes('rewrite the following')) return 'rewrite'
+    if (lower.includes('*(extended response') || lower.includes('**model answer:**') || lower.includes('📝 **examiner notes:**')) return 'extended'
+    if (lower.includes('*(short answer') || lower.includes('✅ **answer:**')) return 'shortanswer'
+    return 'plain'
+  }
+
+  /**
+   * Get visual theme for each question type
+   */
+  const getCardTheme = (type: string): { border: string; bg: string; icon: string; label: string; headerBg: string } => {
+    switch (type) {
+      case 'mcq': return { border: 'border-blue-300', bg: 'bg-blue-50', icon: '🔵', label: 'Multiple Choice', headerBg: 'bg-blue-100' }
+      case 'truefalse': return { border: 'border-purple-300', bg: 'bg-purple-50', icon: '⚖️', label: 'True or False', headerBg: 'bg-purple-100' }
+      case 'fillin': return { border: 'border-teal-300', bg: 'bg-teal-50', icon: '✏️', label: 'Fill in the Blank', headerBg: 'bg-teal-100' }
+      case 'shortanswer': return { border: 'border-indigo-300', bg: 'bg-indigo-50', icon: '📝', label: 'Short Answer', headerBg: 'bg-indigo-100' }
+      case 'error': return { border: 'border-orange-300', bg: 'bg-orange-50', icon: '🔍', label: 'Error Identification', headerBg: 'bg-orange-100' }
+      case 'rewrite': return { border: 'border-cyan-300', bg: 'bg-cyan-50', icon: '🔄', label: 'Rewrite', headerBg: 'bg-cyan-100' }
+      case 'worked': return { border: 'border-emerald-400', bg: 'bg-emerald-50', icon: '🧑‍🏫', label: 'Worked Example', headerBg: 'bg-emerald-100' }
+      case 'practice-set': return { border: 'border-amber-300', bg: 'bg-amber-50', icon: '✏️', label: 'Practice Problems', headerBg: 'bg-amber-100' }
+      case 'extended': return { border: 'border-rose-300', bg: 'bg-rose-50', icon: '📄', label: 'Extended Response', headerBg: 'bg-rose-100' }
+      case 'comparison': return { border: 'border-yellow-300', bg: 'bg-yellow-50', icon: '⚡', label: 'Correct vs Incorrect', headerBg: 'bg-yellow-100' }
+      default: return { border: 'border-gray-300', bg: 'bg-gray-50', icon: '💬', label: '', headerBg: 'bg-gray-100' }
+    }
+  }
+
+  /**
+   * Render the inner content of a question card with special handling for 
+   * answers, steps, options, and annotations
+   */
+  const renderCardContent = (rawLines: string[], type: string): React.ReactNode => {
+    const contentElements: React.ReactNode[] = []
+
+    for (let j = 0; j < rawLines.length; j++) {
+      const line = rawLines[j]
+
+      // Answer line — green highlight box
+      if (line.match(/^✅\s*\*\*Answer:?\*\*/i)) {
+        contentElements.push(
+          <div key={`answer-${j}`} className="lesson-answer-card mt-4 mb-2 p-3 bg-green-50 border border-green-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-green-600 text-lg flex-shrink-0 mt-0.5">✅</span>
+              <div className="text-green-900 font-medium leading-relaxed">{formatInline(line.replace(/^✅\s*\*\*Answer:?\*\*\s*/i, ''))}</div>
+            </div>
+          </div>
+        )
+      }
+      // Model answer block
+      else if (line.match(/^✅\s*\*\*Model Answer:?\*\*/i)) {
+        contentElements.push(
+          <div key={`model-${j}`} className="mt-4 mb-2">
+            <div className="text-green-700 font-semibold mb-2 flex items-center gap-2">
+              <span>✅</span> Model Answer
+            </div>
+          </div>
+        )
+      }
+      // Key insight — amber callout
+      else if (line.match(/^💡\s*\*\*Key Insight:?\*\*/i)) {
+        contentElements.push(
+          <div key={`insight-${j}`} className="lesson-insight-card mt-3 mb-2 p-3 bg-amber-50 border border-amber-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-600 text-lg flex-shrink-0 mt-0.5">💡</span>
+              <div className="text-amber-900 leading-relaxed">{formatInline(line.replace(/^💡\s*\*\*Key Insight:?\*\*\s*/i, ''))}</div>
+            </div>
+          </div>
+        )
+      }
+      // Examiner notes — rose callout
+      else if (line.match(/^📝\s*\*\*Examiner Notes?:?\*\*/i)) {
+        contentElements.push(
+          <div key={`examiner-${j}`} className="mt-3 mb-2 p-3 bg-rose-50 border border-rose-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-rose-600 text-lg flex-shrink-0 mt-0.5">📝</span>
+              <div className="text-rose-900 leading-relaxed">{formatInline(line.replace(/^📝\s*\*\*Examiner Notes?:?\*\*\s*/i, ''))}</div>
+            </div>
+          </div>
+        )
+      }
+      // Annotation lines (📝 italic)
+      else if (line.match(/^📝\s*\*/)) {
+        contentElements.push(
+          <div key={`annotation-${j}`} className="mt-2 mb-1 pl-4 py-1 border-l-2 border-blue-300 text-blue-800 text-sm italic">
+            {formatInline(line.replace(/^📝\s*/, ''))}
+          </div>
+        )
+      }
+      // Answer key header
+      else if (line.match(/^📋\s*\*\*Answer Key:?\*\*/i)) {
+        contentElements.push(
+          <div key={`ak-header-${j}`} className="mt-6 mb-3 pt-4 border-t-2 border-green-300">
+            <div className="text-green-700 font-bold text-lg flex items-center gap-2">
+              <span>📋</span> Answer Key
+            </div>
+          </div>
+        )
+      }
+      // Step lines in worked examples  
+      else if (line.match(/^\*\*Step \d+:?\*\*/i)) {
+        const stepMatch = line.match(/^\*\*Step (\d+):?\*\*\s*(.*)/i)
+        contentElements.push(
+          <div key={`step-${j}`} className="lesson-step-card flex items-start gap-3 my-2 pl-2">
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold mt-0.5">
+              {stepMatch?.[1] || ''}
+            </div>
+            <div className="text-gray-800 leading-relaxed pt-0.5">{formatInline(stepMatch?.[2] || line)}</div>
+          </div>
+        )
+      }
+      // Incorrect comparison
+      else if (line.match(/^❌\s*\*\*Incorrect:?\*\*/i)) {
+        contentElements.push(
+          <div key={`wrong-${j}`} className="mt-3 mb-1 p-3 bg-red-50 border border-red-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-red-500 text-lg flex-shrink-0">❌</span>
+              <div className="text-red-900 leading-relaxed">{formatInline(line.replace(/^❌\s*\*\*Incorrect:?\*\*\s*/i, ''))}</div>
+            </div>
+          </div>
+        )
+      }
+      // Correct comparison
+      else if (line.match(/^✅\s*\*\*Correct:?\*\*/i)) {
+        contentElements.push(
+          <div key={`right-${j}`} className="mt-1 mb-1 p-3 bg-green-50 border border-green-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-green-600 text-lg flex-shrink-0">✅</span>
+              <div className="text-green-900 leading-relaxed">{formatInline(line.replace(/^✅\s*\*\*Correct:?\*\*\s*/i, ''))}</div>
+            </div>
+          </div>
+        )
+      }
+      // Why explanation in comparisons
+      else if (line.match(/^💡\s*\*\*Why:?\*\*/i)) {
+        contentElements.push(
+          <div key={`why-${j}`} className="mt-1 mb-2 p-3 bg-amber-50 border border-amber-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-600 text-lg flex-shrink-0">💡</span>
+              <div className="text-amber-900 leading-relaxed">{formatInline(line.replace(/^💡\s*\*\*Why:?\*\*\s*/i, ''))}</div>
+            </div>
+          </div>
+        )
+      }
+      // MCQ options — styled as pill selectors
+      else if (line.match(/^- \([A-Da-d]\)\s+/)) {
+        const optionMatch = line.match(/^- \(([A-Da-d])\)\s+(.*)/)
+        contentElements.push(
+          <div key={`opt-${j}`} className="lesson-mcq-option flex items-start gap-3 my-1.5 ml-2 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center text-sm font-bold border border-gray-300">
+              {optionMatch?.[1]?.toUpperCase() || ''}
+            </span>
+            <span className="text-gray-800 leading-relaxed pt-0.5">{formatInline(optionMatch?.[2] || line)}</span>
+          </div>
+        )
+      }
+      // Practice problem header
+      else if (line.match(/^\*\*Practice Problem \d+\*\*/i)) {
+        contentElements.push(
+          <div key={`pp-${j}`} className="mt-4 mb-1 font-semibold text-gray-900">{formatInline(line)}</div>
+        )
+      }
+      // Numbered answer key items (1. Answer...)
+      else if (line.match(/^\d+\.\s+/) && type === 'practice-set') {
+        contentElements.push(
+          <div key={`ak-item-${j}`} className="py-1.5 pl-4 border-l-2 border-green-200 ml-2 my-1 text-gray-800">
+            {formatInline(line)}
+          </div>
+        )
+      }
+      // Problem statement
+      else if (line.match(/^\*\*Problem:?\*\*/i)) {
+        contentElements.push(
+          <div key={`problem-${j}`} className="mt-2 mb-3 p-3 bg-gray-100 border border-gray-300 rounded-lg font-medium text-gray-900">
+            {formatInline(line.replace(/^\*\*Problem:?\*\*\s*/i, ''))}
+          </div>
+        )
+      }
+      // Regular list items inside cards
+      else if (line.match(/^[-*]\s+/)) {
+        contentElements.push(
+          <div key={`li-${j}`} className="flex items-start gap-2 my-1 ml-2">
+            <span className="text-gray-400 mt-1.5 flex-shrink-0">•</span>
+            <span className="text-gray-700 leading-relaxed">{formatInline(line.replace(/^[-*]\s+/, ''))}</span>
+          </div>
+        )
+      }
+      // Horizontal rule inside card (separator)
+      else if (line.match(/^[-*_]{3,}$/)) {
+        contentElements.push(
+          <hr key={`hr-${j}`} className="my-4 border-gray-200" />
+        )
+      }
+      // Empty lines
+      else if (line.trim() === '') {
+        contentElements.push(<div key={`space-${j}`} className="h-2" />)
+      }
+      // Everything else — paragraph
+      else {
+        contentElements.push(
+          <div key={`p-${j}`} className="text-gray-800 leading-relaxed my-1">{formatInline(line)}</div>
+        )
+      }
+    }
+
+    return contentElements
+  }
+
+  /**
+   * Flush accumulated blockquote lines, detecting question type and rendering as a styled card
+   */
+  const flushBlockquote = () => {
+    if (blockquoteLines.length === 0) return
+
+    const rawContent = blockquoteLines.join('\n')
+    const strippedLines = blockquoteLines.map(l => l.replace(/^>\s?/, ''))
+    const type = detectBlockquoteType(rawContent)
+    const theme = getCardTheme(type)
+
+    if (type === 'plain') {
+      // Plain blockquote — render as before
+      elements.push(
+        <blockquote key={`bq-${elements.length}`} className="border-l-4 border-blue-500 pl-4 py-2 my-4 italic text-gray-600 bg-blue-50 rounded-r-lg">
+          {strippedLines.map((line, i) => (
+            <div key={i} className="my-0.5">{formatInline(line)}</div>
+          ))}
+        </blockquote>
+      )
+    } else {
+      // Styled question card
+      elements.push(
+        <div key={`card-${elements.length}`} className={`lesson-question-card ${theme.bg} border-2 ${theme.border} rounded-xl my-6 overflow-hidden shadow-sm`}>
+          {/* Card type badge */}
+          {theme.label && (
+            <div className={`${theme.headerBg} px-4 py-2 flex items-center gap-2 border-b ${theme.border}`}>
+              <span className="text-lg">{theme.icon}</span>
+              <span className="text-sm font-semibold text-gray-700 tracking-wide uppercase">{theme.label}</span>
+            </div>
+          )}
+          {/* Card body */}
+          <div className="p-5">
+            {renderCardContent(strippedLines, type)}
+          </div>
+        </div>
+      )
+    }
+
+    blockquoteLines = []
+  }
+
   const formatInline = (text: string): React.ReactNode => {
     // First check if text contains math - if so, process with math renderer
     if (containsMath(text)) {
       return renderMathInText(text)
     }
     
-    // Handle bold **text** and __text__
+    // Process inline formatting: bold, italic, inline code, links
     const parts: React.ReactNode[] = []
     let lastIndex = 0
     
-    // Bold pattern
-    const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g
+    // Combined pattern: bold, italic, inline code
+    const inlineRegex = /\*\*(.+?)\*\*|__(.+?)__|`([^`]+)`|\*(.+?)\*|_([^_]+)_/g
     let match
     
-    while ((match = boldRegex.exec(text)) !== null) {
+    while ((match = inlineRegex.exec(text)) !== null) {
       if (match.index > lastIndex) {
         parts.push(text.slice(lastIndex, match.index))
       }
-      parts.push(<strong key={match.index}>{match[1] || match[2]}</strong>)
-      lastIndex = match.index + match[0].length
-    }
-    
-    if (parts.length > 0) {
-      if (lastIndex < text.length) {
-        parts.push(text.slice(lastIndex))
+      if (match[1] || match[2]) {
+        // Bold
+        parts.push(<strong key={match.index} className="font-semibold text-gray-900">{match[1] || match[2]}</strong>)
+      } else if (match[3]) {
+        // Inline code
+        parts.push(<code key={match.index} className="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-sm font-mono text-pink-700">{match[3]}</code>)
+      } else if (match[4] || match[5]) {
+        // Italic
+        parts.push(<em key={match.index} className="italic text-gray-600">{match[4] || match[5]}</em>)
       }
-      return parts
-    }
-    
-    // Italic pattern
-    const italicRegex = /\*(.+?)\*|_(.+?)_/g
-    while ((match = italicRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(text.slice(lastIndex, match.index))
-      }
-      parts.push(<em key={match.index}>{match[1] || match[2]}</em>)
       lastIndex = match.index + match[0].length
     }
     
@@ -128,8 +384,9 @@ function renderMarkdown(markdown: string): React.ReactNode {
     // Code block handling
     if (line.startsWith('```')) {
       if (inCodeBlock) {
+        flushBlockquote()
         elements.push(
-          <pre key={`code-${i}`} className="bg-gray-100 p-4 rounded-lg overflow-x-auto my-4 text-sm font-mono">
+          <pre key={`code-${i}`} className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4 text-sm font-mono leading-relaxed">
             <code>{codeContent.join('\n')}</code>
           </pre>
         )
@@ -137,6 +394,7 @@ function renderMarkdown(markdown: string): React.ReactNode {
         inCodeBlock = false
       } else {
         flushList()
+        flushBlockquote()
         inCodeBlock = true
       }
       continue
@@ -147,13 +405,131 @@ function renderMarkdown(markdown: string): React.ReactNode {
       continue
     }
 
+    // Blockquote accumulation — collect consecutive > lines for card rendering
+    if (line.startsWith('>')) {
+      flushList()
+      blockquoteLines.push(line)
+      continue
+    } else if (blockquoteLines.length > 0) {
+      // End of blockquote block
+      flushBlockquote()
+    }
+
+    // "Wrong → Right" comparison OUTSIDE blockquotes (in Common Mistakes section)
+    if (line.match(/^❌\s*\*\*Incorrect:?\*\*/i)) {
+      flushList()
+      elements.push(
+        <div key={`wrong-${i}`} className="mt-3 mb-1 p-3 bg-red-50 border border-red-300 rounded-lg">
+          <div className="flex items-start gap-2">
+            <span className="text-red-500 text-lg flex-shrink-0">❌</span>
+            <div className="text-red-900 leading-relaxed">{formatInline(line.replace(/^❌\s*\*\*Incorrect:?\*\*\s*/i, ''))}</div>
+          </div>
+        </div>
+      )
+      continue
+    }
+    if (line.match(/^✅\s*\*\*Correct:?\*\*/i)) {
+      flushList()
+      elements.push(
+        <div key={`right-${i}`} className="mt-1 mb-1 p-3 bg-green-50 border border-green-300 rounded-lg">
+          <div className="flex items-start gap-2">
+            <span className="text-green-600 text-lg flex-shrink-0">✅</span>
+            <div className="text-green-900 leading-relaxed">{formatInline(line.replace(/^✅\s*\*\*Correct:?\*\*\s*/i, ''))}</div>
+          </div>
+        </div>
+      )
+      continue
+    }
+    if (line.match(/^💡\s*\*\*Why:?\*\*/i)) {
+      flushList()
+      elements.push(
+        <div key={`why-${i}`} className="mt-1 mb-3 p-3 bg-amber-50 border border-amber-300 rounded-lg">
+          <div className="flex items-start gap-2">
+            <span className="text-amber-600 text-lg flex-shrink-0">💡</span>
+            <div className="text-amber-900 leading-relaxed">{formatInline(line.replace(/^💡\s*\*\*Why:?\*\*\s*/i, ''))}</div>
+          </div>
+        </div>
+      )
+      continue
+    }
+
+    // Standalone answer line outside blockquotes
+    if (line.match(/^✅\s*\*\*Answer:?\*\*/i)) {
+      flushList()
+      elements.push(
+        <div key={`answer-${i}`} className="lesson-answer-card mt-3 mb-2 p-3 bg-green-50 border border-green-300 rounded-lg">
+          <div className="flex items-start gap-2">
+            <span className="text-green-600 text-lg flex-shrink-0 mt-0.5">✅</span>
+            <div className="text-green-900 font-medium leading-relaxed">{formatInline(line.replace(/^✅\s*\*\*Answer:?\*\*\s*/i, ''))}</div>
+          </div>
+        </div>
+      )
+      continue
+    }
+
+    // Key insight outside blockquotes
+    if (line.match(/^💡\s*\*\*Key Insight:?\*\*/i)) {
+      flushList()
+      elements.push(
+        <div key={`insight-${i}`} className="lesson-insight-card mt-3 mb-2 p-3 bg-amber-50 border border-amber-300 rounded-lg">
+          <div className="flex items-start gap-2">
+            <span className="text-amber-600 text-lg flex-shrink-0 mt-0.5">💡</span>
+            <div className="text-amber-900 leading-relaxed">{formatInline(line.replace(/^💡\s*\*\*Key Insight:?\*\*\s*/i, ''))}</div>
+          </div>
+        </div>
+      )
+      continue
+    }
+
+    // Step lines outside blockquotes (in guided practice)
+    if (line.match(/^\*\*Step \d+:?\*\*/i)) {
+      flushList()
+      const stepMatch = line.match(/^\*\*Step (\d+):?\*\*\s*(.*)/i)
+      elements.push(
+        <div key={`step-${i}`} className="lesson-step-card flex items-start gap-3 my-2 pl-2">
+          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold mt-0.5">
+            {stepMatch?.[1] || ''}
+          </div>
+          <div className="text-gray-800 leading-relaxed pt-0.5">{formatInline(stepMatch?.[2] || line)}</div>
+        </div>
+      )
+      continue
+    }
+
+    // Answer key header outside blockquotes
+    if (line.match(/^📋\s*\*\*Answer Key:?\*\*/i)) {
+      flushList()
+      elements.push(
+        <div key={`ak-${i}`} className="mt-6 mb-3 pt-4 border-t-2 border-green-300">
+          <div className="text-green-700 font-bold text-lg flex items-center gap-2">
+            <span>📋</span> Answer Key
+          </div>
+        </div>
+      )
+      continue
+    }
+
+    // Annotation lines outside blockquotes
+    if (line.match(/^📝\s*.+/)) {
+      flushList()
+      elements.push(
+        <div key={`annot-${i}`} className="mt-2 mb-1 pl-4 py-1.5 border-l-2 border-blue-300 text-blue-800 text-sm italic bg-blue-50 rounded-r-lg">
+          {formatInline(line.replace(/^📝\s*/, ''))}
+        </div>
+      )
+      continue
+    }
+
     // Headers
-    if (line.startsWith('### ')) {
+    if (line.startsWith('#### ')) {
+      flushList()
+      elements.push(<h4 key={i} className="text-lg font-bold text-gray-900 mt-6 mb-3">{formatInline(line.slice(5))}</h4>)
+    } else if (line.startsWith('### ')) {
       flushList()
       elements.push(<h3 key={i} className="text-xl font-bold text-gray-900 mt-8 mb-4">{formatInline(line.slice(4))}</h3>)
     } else if (line.startsWith('## ')) {
       flushList()
-      elements.push(<h2 key={i} className="text-2xl font-bold text-gray-900 mt-10 mb-4 pb-2 border-b">{formatInline(line.slice(3))}</h2>)
+      elements.push(<h2 key={i} className="text-2xl font-bold text-gray-900 mt-10 mb-4 pb-2 border-b border-gray-200">{formatInline(line.slice(3))}</h2>)
     } else if (line.startsWith('# ')) {
       flushList()
       elements.push(<h1 key={i} className="text-3xl font-bold text-gray-900 mt-6 mb-6">{formatInline(line.slice(2))}</h1>)
@@ -174,23 +550,30 @@ function renderMarkdown(markdown: string): React.ReactNode {
       }
       listItems.push(line.replace(/^\d+\.\s+/, ''))
     }
-    // Blockquote
-    else if (line.startsWith('> ')) {
-      flushList()
-      elements.push(
-        <blockquote key={i} className="border-l-4 border-blue-500 pl-4 py-2 my-4 italic text-gray-600 bg-blue-50">
-          {formatInline(line.slice(2))}
-        </blockquote>
-      )
-    }
     // Horizontal rule
     else if (line.match(/^[-*_]{3,}$/)) {
       flushList()
-      elements.push(<hr key={i} className="my-8 border-gray-300" />)
+      elements.push(<hr key={i} className="my-8 border-gray-200" />)
     }
     // Empty line
     else if (line.trim() === '') {
       flushList()
+    }
+    // Table rows (| col | col |)
+    else if (line.match(/^\|.+\|$/)) {
+      flushList()
+      const cells = line.split('|').filter(c => c.trim() !== '')
+      // Skip separator rows (|---|---|)
+      if (cells.every(c => c.trim().match(/^[-:]+$/))) continue
+      const isHeader = i + 1 < lines.length && lines[i + 1]?.match(/^\|[-|: ]+\|$/)
+      const gridCols = cells.length <= 2 ? 'grid-cols-2' : cells.length === 3 ? 'grid-cols-3' : 'grid-cols-4'
+      elements.push(
+        <div key={`tr-${i}`} className={`grid ${gridCols} gap-2 px-3 py-2 border-b border-gray-200 ${isHeader ? 'font-semibold bg-gray-50' : ''}`}>
+          {cells.map((cell, ci) => (
+            <div key={ci} className="text-sm text-gray-800 px-2">{formatInline(cell.trim())}</div>
+          ))}
+        </div>
+      )
     }
     // Regular paragraph
     else {
@@ -199,7 +582,8 @@ function renderMarkdown(markdown: string): React.ReactNode {
     }
   }
   
-  flushList() // Flush any remaining list
+  flushList()
+  flushBlockquote()
   
   return elements
 }
@@ -720,7 +1104,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
                     )}
                   </CardHeader>
                   <CardContent>
-                    <div className="prose prose-lg max-w-none">
+                    <div className="prose-lesson max-w-none">
                       {renderMarkdown(pages[currentPage - 1] || '')}
                     </div>
                     

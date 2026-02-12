@@ -37,6 +37,177 @@ function isWritingSubject(subject: string): boolean {
 }
 
 /**
+ * QUESTION FORMAT LIBRARY
+ * 
+ * Strict Markdown patterns the LLM must use for every question/answer in the lesson.
+ * The renderer detects these patterns and styles them as premium interactive cards.
+ * 
+ * GOLDEN RULE: Every question MUST have an answer provided somewhere in the same section.
+ */
+const QUESTION_FORMAT_LIBRARY = `
+## 📐 QUESTION FORMAT LIBRARY (YOU MUST USE THESE EXACT FORMATS)
+
+NEVER present a question without its answer. This is an absolute rule.
+Select the correct format from the library below based on question type.
+Use the EXACT Markdown patterns shown — the rendering engine depends on them.
+
+---
+
+### FORMAT A: Multiple Choice (MCQ)
+Use for: Paper 1 style, mini-quiz MCQs, any question with fixed options.
+
+> **Question [number]** *(Multiple Choice — [marks] mark(s))*
+>
+> [Question text here]
+>
+> - (A) [Option A]
+> - (B) [Option B]
+> - (C) [Option C]
+> - (D) [Option D]
+>
+> ✅ **Answer:** ([correct letter]) [brief explanation why]
+
+---
+
+### FORMAT B: True / False
+Use for: Mini-quiz true/false items, quick concept checks.
+
+> **Question [number]** *(True or False)*
+>
+> [Statement here]
+>
+> ✅ **Answer:** [True/False] — [one-sentence explanation]
+
+---
+
+### FORMAT C: Fill in the Blank
+Use for: Mini-quiz fill-ins, vocabulary checks, formula recall.
+
+> **Question [number]** *(Fill in the Blank)*
+>
+> [Sentence with ______ for the blank]
+>
+> ✅ **Answer:** [correct word/phrase]
+
+---
+
+### FORMAT D: Short Answer / Structured
+Use for: Paper 2 style, exam-style questions requiring a written response.
+
+> **Question [number]** *(Short Answer — [marks] marks)*
+>
+> [Question text here]
+>
+> ✅ **Answer:** [Complete model answer]
+
+---
+
+### FORMAT E: Error Identification / Correction
+Use for: English/writing topics, "spot the mistake" questions.
+
+> **Question [number]** *(Error Identification)*
+>
+> Find and correct the error(s) in the following:
+>
+> *"[Text with error(s)]"*
+>
+> ✅ **Answer:** The error is [describe error]. Corrected: *"[Fixed text]"*
+
+---
+
+### FORMAT F: Rewrite / Transform
+Use for: Grammar, punctuation, sentence combining, formal/informal conversion.
+
+> **Question [number]** *(Rewrite)*
+>
+> Rewrite the following [with instruction]:
+>
+> *"[Original text]"*
+>
+> ✅ **Answer:** *"[Rewritten text]"* — [brief note on what changed and why]
+
+---
+
+### FORMAT G: Worked Example (Guided Practice)
+Use for: Section 7 guided practice, step-by-step walkthroughs.
+This is the ONLY format where the answer is built up through steps.
+
+> **Worked Example [number]: [Title]** *([Difficulty Level])*
+>
+> **Problem:** [State the problem clearly]
+>
+> **Step 1:** [What to do and WHY]
+>
+> **Step 2:** [Next step with reasoning]
+>
+> **Step 3:** [Continue as needed...]
+>
+> ✅ **Answer:** [Final answer clearly stated]
+>
+> 💡 **Key Insight:** [What principle this demonstrates]
+
+---
+
+### FORMAT H: Independent Practice
+Use for: Section 8 practice problems. Present ALL questions first, then ALL answers together.
+
+> **Practice Problem 1** *(Easy)* — [Question text]
+>
+> **Practice Problem 2** *(Easy-Medium)* — [Question text]
+>
+> **Practice Problem 3** *(Medium)* — [Question text]
+>
+> **Practice Problem 4** *(Medium-Hard)* — [Question text]
+>
+> **Practice Problem 5** *(Challenge)* — [Question text]
+>
+> ---
+>
+> 📋 **Answer Key:**
+> 1. [Answer with brief explanation]
+> 2. [Answer with brief explanation]
+> 3. [Answer with brief explanation]
+> 4. [Answer with brief explanation]
+> 5. [Answer with brief explanation]
+
+---
+
+### FORMAT I: Comparison (Correct vs Incorrect)
+Use for: Common mistakes section, showing right vs wrong.
+
+> ❌ **Incorrect:** [wrong version]
+>
+> ✅ **Correct:** [right version]
+>
+> 💡 **Why:** [explanation of the difference]
+
+---
+
+### FORMAT J: Extended Response
+Use for: Paper 2 extended questions, essay-type questions.
+
+> **Question [number]** *(Extended Response — [marks] marks)*
+>
+> [Full question text with any stimulus material]
+>
+> ✅ **Model Answer:**
+>
+> [Complete model answer, properly paragraphed]
+>
+> 📝 **Examiner Notes:** [What earns full marks, what to avoid]
+
+---
+
+## ⚠️ MANDATORY ANSWER RULES
+1. **Every question MUST have a ✅ Answer** — no exceptions
+2. **Section 6 (Exam-Style Examples):** Include answers with each question using the appropriate format above
+3. **Section 8 (Independent Practice):** Present questions first, then an Answer Key section using FORMAT H
+4. **Section 9 (Mini-Quiz):** Include the answer inline using the appropriate format (A, B, C, or D)
+5. **Section 12 (Extension Tasks):** If tasks have definite answers, provide them; if open-ended, provide guidance on what a good response looks like
+6. Never use "Answer left as exercise" or "Try this yourself" without providing the answer
+`
+
+/**
  * TextbookLesson - Deep narrative lesson (2000-2500 words)
  * This is the primary output format for coaching content
  */
@@ -239,45 +410,26 @@ This section should feel practical and reassuring — "everyone makes these mist
 
 ## 6. 📝 Exam-Style Examples
 Provide 4-5 questions that look like real CSEC exam questions. Mix the formats:
-- 2 multiple choice (Paper 1 style)
-- 2 structured/short answer (Paper 2 style)
-- 1 application problem (Paper 2 extended)
+- 2 multiple choice (Paper 1 style) → use FORMAT A
+- 2 structured/short answer (Paper 2 style) → use FORMAT D
+- 1 application problem (Paper 2 extended) → use FORMAT J
 
-Do NOT provide answers here — just the questions. Label each with its format and approximate marks.
+Each question MUST include its answer using the ✅ Answer pattern from the Question Format Library.
 
 ## 7. 🧑‍🏫 Guided Practice (Step-by-Step)
-This is the HEART of the lesson. Walk the student through 3 complete worked examples, progressing in difficulty:
+This is the HEART of the lesson. Walk the student through 3 complete worked examples using FORMAT G, progressing in difficulty:
 
-### Worked Example 1: [Title] *(Confidence Builder)*
-**Problem:** [State it clearly]
-
-**Let's solve this together:**
-- **Step 1:** [What to do first and WHY]
-- **Step 2:** [Next step with reasoning]
-- **Step 3:** [Continue...]
-- **Answer:** [Final answer]
-- **✅ Key Insight:** [What principle this demonstrates]
-
-### Worked Example 2: [Title] *(Building Up)*
-(Same structure but slightly harder — requires combining ideas)
-
-### Worked Example 3: [Title] *(CSEC Exam Level)*
-(Match actual CSEC difficulty — this is what they'll see on the paper)
+### Worked Example 1 using FORMAT G *(Confidence Builder)*
+### Worked Example 2 using FORMAT G *(Building Up — requires combining ideas)*
+### Worked Example 3 using FORMAT G *(CSEC Exam Level — match actual difficulty)*
 
 For each step, explain your THINKING, not just the calculation. Model the inner dialogue: "First I notice... so that tells me... which means I should..."
 
 ## 8. ✏️ Independent Practice
-Provide 5 practice problems the student should try on their own. Progress from easy to hard:
-1. (Easy) ...
-2. (Easy-Medium) ...
-3. (Medium) ...
-4. (Medium-Hard) ...
-5. (Challenge) ...
-
-Provide answers in a collapsed/spoiler section at the end: "**Answers:** 1) ... 2) ... 3) ... 4) ... 5) ..."
+Use FORMAT H exactly. Present 5 practice problems progressing from easy to hard, then provide a complete Answer Key section. Every problem MUST have its answer in the Answer Key.
 
 ## 9. 📋 Mini-Quiz
-5 quick questions (mixed format: true/false, fill-in-the-blank, multiple choice) that test whether the student grasped the key ideas. Include answers immediately after each question in parentheses.
+5 quick questions using the appropriate format from the library (FORMAT A for MCQ, FORMAT B for true/false, FORMAT C for fill-in-the-blank). Each question MUST include its ✅ Answer inline.
 
 ## 10. 📌 Micro-Summary
 A tight recap in bullet points — NO MORE than 6-8 bullets. Each bullet = one essential fact, rule, or formula. This is the student's "cheat sheet" for revision.
@@ -308,11 +460,15 @@ For students who want to push further:
 - When you introduce a formula, ALWAYS follow it with a plain-English translation
 - Use Caribbean examples, names, and contexts (Trinidad, Jamaica, Barbados, etc.)
 - Format all math clearly using proper notation
-- NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously${contextSection}`
+- NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously
+
+${QUESTION_FORMAT_LIBRARY}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
 Your audience is a 14-year-old Caribbean student who struggles with this subject and needs patient, step-by-step instruction. Follow ALL 12 sections of the lesson blueprint exactly. Make every section count.
+
+CRITICAL: Use the Question Format Library for ALL questions. Every question must have its answer provided. Select the right format (A through J) for each question type.
 
 The lesson should be 3000-4000 words total. Output in clean Markdown format.`
 
@@ -368,47 +524,28 @@ Relate mistakes to what CSEC examiners specifically penalize. For ${subject}, fo
 
 ## 6. 📝 Exam-Style Examples
 Provide 4-5 questions that look like real CSEC exam questions. Mix the formats:
-- 2 Paper 1 style (multiple choice — error recognition, comprehension, grammar)
-- 2 Paper 2 style (short answer — rewrite, identify, explain)
-- 1 Paper 2 extended (short essay or paragraph response)
+- 2 Paper 1 style (error recognition, comprehension) → use FORMAT A or FORMAT E
+- 2 Paper 2 style (rewrite, identify, explain) → use FORMAT D or FORMAT F
+- 1 Paper 2 extended (short essay or paragraph response) → use FORMAT J
 
-Do NOT provide answers here — just the questions. Label each with its Paper, Section, and approximate marks.
+Each question MUST include its answer using the ✅ Answer pattern from the Question Format Library.
 
 ## 7. 🧑‍🏫 Guided Practice (Step-by-Step)
-This is the HEART of the lesson. Walk the student through 2-3 complete examples:
+This is the HEART of the lesson. Walk the student through 2-3 complete examples using FORMAT G:
 
-### Guided Example 1: [Title] *(Showing You How)*
-**Task:** [State the exam-style task clearly]
-
-**Let's work through this together:**
-- **Step 1:** [Read/analyze — what is the question really asking?]
-- **Step 2:** [Plan — what structure/content do we need?]
-- **Step 3:** [Draft — write out the response, explaining each choice]
-- **Step 4:** [Check — review against the mark scheme criteria]
-- **✅ Why this scores well:** [Explain what makes this response strong]
-
-### Guided Example 2: [Title] *(Building Your Skills)*
-(Same structure, slightly harder task)
-
-### Guided Example 3: [Title] *(CSEC Exam Level)*
-(Match actual exam format and difficulty)
+### Guided Example 1 using FORMAT G *(Showing You How)*
+### Guided Example 2 using FORMAT G *(Building Your Skills — slightly harder)*
+### Guided Example 3 using FORMAT G *(CSEC Exam Level)*
 
 For writing-based tasks, include ANNOTATED model answers — show the response AND explain why specific word choices, structures, or techniques earn marks. Use annotations like:
 📝 *This opening sentence works because it directly addresses the question.*
 📝 *Notice how evidence is used here to support the point.*
 
 ## 8. ✏️ Independent Practice
-Provide 5 tasks the student should try alone, progressing in difficulty:
-1. (Easy) ...
-2. (Easy-Medium) ...
-3. (Medium) ...
-4. (Medium-Hard) ...
-5. (Challenge) ...
-
-For writing tasks, include a brief "Success Checklist" — 3-4 things to include in their response.
+Use FORMAT H exactly. Present 5 tasks progressing from easy to hard, then provide a complete Answer Key section. For writing tasks, also include a brief "Success Checklist" — 3-4 things to include in their response. Every task MUST have its answer in the Answer Key.
 
 ## 9. 📋 Mini-Quiz
-5 quick questions (mixed: multiple choice, error identification, short rewrite) that test whether the student grasped the key ideas. Include answers immediately after each question in parentheses.
+5 quick questions using the appropriate format from the library (FORMAT A for MCQ, FORMAT B for true/false, FORMAT E for error identification, FORMAT F for rewrite). Each question MUST include its ✅ Answer inline.
 
 ## 10. 📌 Micro-Summary
 A tight recap — NO MORE than 6-8 bullets. Each bullet = one essential rule, fact, or technique. This is the student's revision cheat sheet.
@@ -441,11 +578,15 @@ For students who want to push further:
 - When showing model writing, ANNOTATE it so the student understands WHY it works
 - Include templates and sentence starters the student can adapt
 - NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously
-- When a student makes an error in a practice context, explain the EFFECT of the error on the reader first, then show the fix${contextSection}`
+- When a student makes an error in a practice context, explain the EFFECT of the error on the reader first, then show the fix
+
+${QUESTION_FORMAT_LIBRARY}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
 Your audience is a 14-year-old Caribbean student who needs help with both understanding content and expressing it in writing. Follow ALL 12 sections of the lesson blueprint exactly. Teach both WHAT to know and HOW to write about it.
+
+CRITICAL: Use the Question Format Library for ALL questions. Every question must have its answer provided. Select the right format (A through J) for each question type.
 
 The lesson should be 3000-4000 words total. Output in clean Markdown format.`
 
@@ -499,45 +640,26 @@ List 4-6 specific mistakes students make with this topic. For EACH mistake:
 
 ## 6. 📝 Exam-Style Examples
 Provide 4-5 questions that look like real CSEC exam questions. Mix the formats:
-- 2 multiple choice (Paper 1 style)
-- 2 short answer / structured (Paper 2 style)
-- 1 extended response / application (Paper 2 style)
+- 2 multiple choice (Paper 1 style) → use FORMAT A
+- 2 short answer / structured (Paper 2 style) → use FORMAT D
+- 1 extended response / application (Paper 2 style) → use FORMAT J
 
-Do NOT provide answers here — just the questions. Label each with its format and approximate marks.
+Each question MUST include its answer using the ✅ Answer pattern from the Question Format Library.
 
 ## 7. 🧑‍🏫 Guided Practice (Step-by-Step)
-This is the HEART of the lesson. Walk the student through 3 complete examples, progressing in difficulty:
+This is the HEART of the lesson. Walk the student through 3 complete examples using FORMAT G, progressing in difficulty:
 
-### Guided Example 1: [Title] *(Confidence Builder)*
-**Question:** [State it clearly]
-
-**Let's work through this together:**
-- **Step 1:** [What to do first and WHY]
-- **Step 2:** [Next step with reasoning]
-- **Step 3:** [Continue...]
-- **Answer:** [Final answer]
-- **✅ Key Insight:** [What principle this demonstrates]
-
-### Guided Example 2: [Title] *(Building Up)*
-(Same structure, slightly harder)
-
-### Guided Example 3: [Title] *(CSEC Exam Level)*
-(Match actual CSEC difficulty)
+### Guided Example 1 using FORMAT G *(Confidence Builder)*
+### Guided Example 2 using FORMAT G *(Building Up — slightly harder)*
+### Guided Example 3 using FORMAT G *(CSEC Exam Level)*
 
 For each step, explain your THINKING — model the reasoning a student should follow.
 
 ## 8. ✏️ Independent Practice
-Provide 5 practice questions the student should try on their own. Progress from easy to hard:
-1. (Easy) ...
-2. (Easy-Medium) ...
-3. (Medium) ...
-4. (Medium-Hard) ...
-5. (Challenge) ...
-
-Provide answers at the end: "**Answers:** 1) ... 2) ... 3) ... 4) ... 5) ..."
+Use FORMAT H exactly. Present 5 practice questions progressing from easy to hard, then provide a complete Answer Key section. Every question MUST have its answer in the Answer Key.
 
 ## 9. 📋 Mini-Quiz
-5 quick questions (mixed format: true/false, fill-in-the-blank, multiple choice) that test whether the student grasped the key ideas. Include answers immediately after each question in parentheses.
+5 quick questions using the appropriate format from the library (FORMAT A for MCQ, FORMAT B for true/false, FORMAT C for fill-in-the-blank). Each question MUST include its ✅ Answer inline.
 
 ## 10. 📌 Micro-Summary
 A tight recap in bullet points — NO MORE than 6-8 bullets. Each bullet = one essential fact, concept, or rule. This is the student's "cheat sheet" for revision.
@@ -566,11 +688,15 @@ For students who want to push further:
 - Assume the student has NO prior knowledge of this topic
 - Be warm, encouraging, and patient
 - Use Caribbean examples, names, and contexts (Trinidad, Jamaica, Barbados, Guyana, etc.)
-- NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously${contextSection}`
+- NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously
+
+${QUESTION_FORMAT_LIBRARY}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
 Your audience is a 14-year-old Caribbean student who needs patient, step-by-step instruction. Follow ALL 12 sections of the lesson blueprint exactly. Make every section count.
+
+CRITICAL: Use the Question Format Library for ALL questions. Every question must have its answer provided. Select the right format (A through J) for each question type.
 
 The lesson should be 3000-4000 words total. Output in clean Markdown format.`
 
