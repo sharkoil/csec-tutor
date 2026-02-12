@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { renderMathInText, containsMath } from '@/components/math-renderer'
 
 // Enhanced CoachingResponse with narrative content and fallback info
 interface GraduatedExample {
@@ -73,15 +74,18 @@ function renderMarkdown(markdown: string): React.ReactNode {
   }
 
   const formatInline = (text: string): React.ReactNode => {
+    // First check if text contains math - if so, process with math renderer
+    if (containsMath(text)) {
+      return renderMathInText(text)
+    }
+    
     // Handle bold **text** and __text__
-    let formatted = text
     const parts: React.ReactNode[] = []
     let lastIndex = 0
     
     // Bold pattern
     const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g
     let match
-    let processedText = text
     
     while ((match = boldRegex.exec(text)) !== null) {
       if (match.index > lastIndex) {
@@ -283,6 +287,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
   const [expandedExamples, setExpandedExamples] = useState<Set<number>>(new Set([0])) // First example expanded by default
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
+  const [isReviewMode, setIsReviewMode] = useState(false)
   const topic = decodeURIComponent(encodedTopic)
   
   // Cycle through loading messages every 3 seconds
@@ -357,6 +362,16 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
         }
 
         setPlan(mockPlan)
+
+        // Check if coaching is already completed for mock users
+        const mockProgress = JSON.parse(localStorage.getItem('csec_mock_progress') || '{}')
+        const key = `${planId}_${topic}`
+        if (mockProgress[key]?.coaching_completed) {
+          setIsReviewMode(true)
+          // Auto-load cached lesson for review
+          loadCachedLesson(mockPlan.subject)
+        }
+
         setIsLoading(false)
         return
       }
@@ -377,7 +392,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
 
       setPlan(data)
 
-      // Check if coaching is already completed
+      // Check if coaching is already completed — if so, load cached content for review
       const { data: progressData } = await supabase
         .from('progress')
         .select('*')
@@ -387,13 +402,38 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
         .single()
 
       if (progressData?.coaching_completed) {
-        router.push(`/plans/${planId}`)
+        setIsReviewMode(true)
+        // Auto-load the cached lesson so the user can review it
+        loadCachedLesson(data.subject)
       }
     } catch (error) {
       console.error('Error fetching plan:', error)
       router.push('/dashboard')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  /**
+   * Load cached lesson content (for review mode)
+   */
+  const loadCachedLesson = async (subject: string) => {
+    try {
+      const response = await fetch('/api/ai/coaching', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, topic })
+      })
+
+      if (!response.ok) throw new Error('Failed to load cached lesson')
+
+      const coachingData = await response.json()
+      if (coachingData.error) throw new Error(coachingData.error)
+
+      setCoaching(coachingData)
+    } catch (error) {
+      console.error('Error loading cached lesson:', error)
+      // Don't show fallback content for review mode — just show a message
     }
   }
 
@@ -528,10 +568,15 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-4">
             <BookOpen className="h-8 w-8 text-blue-600" />
-            <h2 className="text-3xl font-bold text-gray-900">Fundamentals Coaching</h2>
+            <h2 className="text-3xl font-bold text-gray-900">
+              {isReviewMode ? 'Review: ' : ''}Fundamentals Coaching
+            </h2>
           </div>
           <p className="text-lg text-gray-600">
-            Master the core concepts of {topic} with personalized AI coaching
+            {isReviewMode 
+              ? `Reviewing your saved lesson on ${topic}. You can come back here anytime.`
+              : `Master the core concepts of ${topic} with personalized AI coaching`
+            }
           </p>
         </div>
 
@@ -1063,20 +1108,28 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </Card>
             )}
 
-            {/* Complete Coaching Button */}
+            {/* Complete Coaching / Back to Plan Button */}
             <Card>
               <CardContent className="text-center py-6">
                 <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Ready to Move Forward?
+                  {isReviewMode ? 'Finished Reviewing?' : 'Ready to Move Forward?'}
                 </h3>
                 <p className="text-gray-600 mb-4">
-                  You've completed the comprehensive coaching for {topic}. 
-                  Now it's time to test your knowledge with practice questions.
+                  {isReviewMode 
+                    ? `You can come back to review this lesson on ${topic} anytime you need a refresher.`
+                    : `You've completed the comprehensive coaching for ${topic}. Now it's time to test your knowledge with practice questions.`
+                  }
                 </p>
-                <Button onClick={completeCoaching} size="lg">
-                  Complete Coaching & Continue
-                </Button>
+                {isReviewMode ? (
+                  <Link href={`/plans/${planId}`}>
+                    <Button size="lg">Back to Study Plan</Button>
+                  </Link>
+                ) : (
+                  <Button onClick={completeCoaching} size="lg">
+                    Complete Coaching & Continue
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
