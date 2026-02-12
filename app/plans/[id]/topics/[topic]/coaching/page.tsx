@@ -833,7 +833,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
         body: JSON.stringify({
           subject: plan.subject,
           topic,
-          userLevel: 'intermediate'
+          userLevel: 'intermediate',
+          wizardData: plan.wizard_data || undefined
         })
       })
 

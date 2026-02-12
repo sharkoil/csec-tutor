@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { subject, topic, format = 'textbook', refresh = false } = await request.json()
+    const { subject, topic, format = 'textbook', refresh = false, wizardData } = await request.json()
 
     if (!subject || !topic) {
       return NextResponse.json(
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Generate new lesson
-      const lesson: TextbookLesson = await AICoach.generateTextbookLesson(subject, topic)
+      const lesson: TextbookLesson = await AICoach.generateTextbookLesson(subject, topic, wizardData)
       
       // Cache the lesson (async, don't wait)
       cacheLesson(lesson).catch(err => console.error('Cache error:', err))

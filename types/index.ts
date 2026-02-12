@@ -6,6 +6,16 @@ export interface User {
   updated_at?: string
 }
 
+export interface WizardData {
+  target_grade: 'grade_1' | 'grade_2' | 'grade_3'
+  proficiency_level: 'beginner' | 'intermediate' | 'advanced'
+  topic_confidence: Record<string, 'no_exposure' | 'struggling' | 'some_knowledge' | 'confident'>
+  exam_timeline: 'may_june' | 'january' | 'no_exam'
+  study_minutes_per_session: number
+  study_days_per_week: number
+  learning_style: 'theory_first' | 'practice_first' | 'blended'
+}
+
 export interface StudyPlan {
   id: string
   user_id: string
@@ -15,6 +25,7 @@ export interface StudyPlan {
   description?: string
   help_areas?: string[]
   attachments?: PlanAttachment[]
+  wizard_data?: WizardData
   created_at: string
   updated_at: string
 }

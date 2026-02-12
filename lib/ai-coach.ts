@@ -291,7 +291,13 @@ export class AICoach {
    */
   static async generateTextbookLesson(
     subject: string,
-    topic: string
+    topic: string,
+    wizardData?: {
+      target_grade?: string
+      proficiency_level?: string
+      topic_confidence?: Record<string, string>
+      learning_style?: string
+    }
   ): Promise<TextbookLesson> {
     // Get relevant curriculum context
     const relevantContent = await VectorSearch.searchSimilarContent(
@@ -304,7 +310,7 @@ export class AICoach {
     const contextContent = relevantContent.map((item: { content: string }) => item.content).join('\n\n---\n\n')
 
     // Select appropriate prompt based on subject type
-    const prompt = this.getTextbookPrompt(subject, topic, contextContent)
+    const prompt = this.getTextbookPrompt(subject, topic, contextContent, wizardData)
     
     const openai = getOpenAIClient()
     const startTime = Date.now()
@@ -347,25 +353,83 @@ export class AICoach {
   /**
    * Generate the textbook-style prompt based on subject type
    */
-  private static getTextbookPrompt(subject: string, topic: string, contextContent: string): { system: string; user: string } {
+  private static getTextbookPrompt(
+    subject: string, topic: string, contextContent: string,
+    wizardData?: { target_grade?: string; proficiency_level?: string; topic_confidence?: Record<string, string>; learning_style?: string }
+  ): { system: string; user: string } {
     const contextSection = contextContent 
       ? `\n\n## OFFICIAL CSEC CURRICULUM CONTEXT\nUse this content to ground your lesson in the actual syllabus:\n\n${contextContent}`
       : ''
 
+    // Build proficiency context from wizard data
+    const proficiencyContext = this.buildProficiencyContext(subject, topic, wizardData)
+
     if (isSTEMSubject(subject)) {
-      return this.getSTEMTextbookPrompt(subject, topic, contextSection)
+      return this.getSTEMTextbookPrompt(subject, topic, contextSection, proficiencyContext)
     } else if (isWritingSubject(subject)) {
-      return this.getWritingTextbookPrompt(subject, topic, contextSection)
+      return this.getWritingTextbookPrompt(subject, topic, contextSection, proficiencyContext)
     } else {
-      return this.getGeneralTextbookPrompt(subject, topic, contextSection)
+      return this.getGeneralTextbookPrompt(subject, topic, contextSection, proficiencyContext)
     }
+  }
+
+  /**
+   * Build a proficiency context block to inject into prompts.
+   * This adapts lesson depth based on the student's wizard assessment.
+   */
+  private static buildProficiencyContext(
+    subject: string, topic: string,
+    wizardData?: { target_grade?: string; proficiency_level?: string; topic_confidence?: Record<string, string>; learning_style?: string }
+  ): string {
+    if (!wizardData) return ''
+
+    const grade = wizardData.target_grade === 'grade_1' ? 'Grade I (75-100%)'
+      : wizardData.target_grade === 'grade_2' ? 'Grade II (60-74%)'
+      : 'Grade III (50-59%)'
+    const confidence = wizardData.topic_confidence?.[topic] || 'unknown'
+    const level = wizardData.proficiency_level || 'intermediate'
+    const style = wizardData.learning_style || 'blended'
+
+    let depthInstruction = ''
+    if (confidence === 'no_exposure' || confidence === 'struggling') {
+      depthInstruction = `This student has LOW confidence in "${topic}" (self-assessed: "${confidence}"). 
+Adapt your lesson for FOUNDATIONAL depth:
+- Start from absolute basics — assume zero prior knowledge
+- Use more analogies and everyday examples
+- Break every concept into smaller steps
+- More worked examples (5-6 instead of 3)
+- Slower pacing — one idea per paragraph
+- Extra encouragement and reassurance
+- Aim for 3500-4500 words (longer, more thorough)`
+    } else if (confidence === 'confident') {
+      depthInstruction = `This student has HIGH confidence in "${topic}" (self-assessed: "confident"). 
+Adapt your lesson for INTENSIVE depth:
+- Skip the very basics — assume foundational knowledge is solid
+- Focus on application, analysis, and exam technique
+- Include harder worked examples (medium-hard and hard difficulty)
+- Emphasize common exam traps and marking scheme tips
+- Include more challenging extension problems
+- Aim for 2500-3000 words (more focused)`
+    } else {
+      depthInstruction = `This student has MODERATE confidence in "${topic}". 
+Use STANDARD depth — follow the default lesson blueprint as written.`
+    }
+
+    let styleInstruction = ''
+    if (style === 'theory_first') {
+      styleInstruction = 'Learning style: THEORY FIRST — lead with explanations and concepts before any practice problems.'
+    } else if (style === 'practice_first') {
+      styleInstruction = 'Learning style: PRACTICE FIRST — start each subtopic with a motivating problem, let them try it, THEN explain the concept.'
+    }
+
+    return `\n\n## 🎓 STUDENT PROFICIENCY PROFILE\nTarget grade: ${grade}\nOverall level: ${level}\nConfidence in this topic: ${confidence}\n${depthInstruction}\n${styleInstruction}\n---\n`
   }
 
   /**
    * STEM textbook prompt - scaffolded lesson blueprint for mathematical/scientific topics
    * Designed for 14-year-olds who need structured, supportive instruction
    */
-  private static getSTEMTextbookPrompt(subject: string, topic: string, contextSection: string): { system: string; user: string } {
+  private static getSTEMTextbookPrompt(subject: string, topic: string, contextSection: string, proficiencyContext: string = ''): { system: string; user: string } {
     const system = `You are a warm, patient, and encouraging CSEC ${subject} tutor writing a lesson for a 14-year-old student who finds this subject challenging. Your goal is to make "${topic}" feel approachable, logical, and conquerable — NOT to produce a wall of text.
 
 You must follow this EXACT 12-section lesson blueprint. Every section is required. Use clear Markdown headings for each.
@@ -462,14 +526,14 @@ For students who want to push further:
 - Format all math clearly using proper notation
 - NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously
 
-${QUESTION_FORMAT_LIBRARY}${contextSection}`
+${QUESTION_FORMAT_LIBRARY}${proficiencyContext}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
 Your audience is a 14-year-old Caribbean student who struggles with this subject and needs patient, step-by-step instruction. Follow ALL 12 sections of the lesson blueprint exactly. Make every section count.
 
 CRITICAL: Use the Question Format Library for ALL questions. Every question must have its answer provided. Select the right format (A through J) for each question type.
-
+${proficiencyContext ? '\nIMPORTANT: Adapt the depth and pacing based on the STUDENT PROFICIENCY PROFILE provided in the system prompt.' : ''}
 The lesson should be 3000-4000 words total. Output in clean Markdown format.`
 
     return { system, user }
@@ -479,7 +543,7 @@ The lesson should be 3000-4000 words total. Output in clean Markdown format.`
    * Writing/Humanities textbook prompt - scaffolded lesson blueprint for essay/writing-based topics
    * Designed for 14-year-olds who need structured support with both content AND writing skills
    */
-  private static getWritingTextbookPrompt(subject: string, topic: string, contextSection: string): { system: string; user: string } {
+  private static getWritingTextbookPrompt(subject: string, topic: string, contextSection: string, proficiencyContext: string = ''): { system: string; user: string } {
     const system = `You are a warm, patient, and encouraging CSEC ${subject} tutor writing a lesson for a 14-year-old student who needs help with both UNDERSTANDING content and EXPRESSING it in writing. Your goal is to make "${topic}" feel manageable and give them concrete tools to succeed.
 
 You must follow this EXACT 12-section lesson blueprint. Every section is required. Use clear Markdown headings for each.
@@ -580,14 +644,14 @@ For students who want to push further:
 - NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously
 - When a student makes an error in a practice context, explain the EFFECT of the error on the reader first, then show the fix
 
-${QUESTION_FORMAT_LIBRARY}${contextSection}`
+${QUESTION_FORMAT_LIBRARY}${proficiencyContext}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
 Your audience is a 14-year-old Caribbean student who needs help with both understanding content and expressing it in writing. Follow ALL 12 sections of the lesson blueprint exactly. Teach both WHAT to know and HOW to write about it.
 
 CRITICAL: Use the Question Format Library for ALL questions. Every question must have its answer provided. Select the right format (A through J) for each question type.
-
+${proficiencyContext ? '\nIMPORTANT: Adapt the depth and pacing based on the STUDENT PROFICIENCY PROFILE provided in the system prompt.' : ''}
 The lesson should be 3000-4000 words total. Output in clean Markdown format.`
 
     return { system, user }
@@ -597,7 +661,7 @@ The lesson should be 3000-4000 words total. Output in clean Markdown format.`
    * General textbook prompt - scaffolded lesson blueprint for all other subjects
    * Designed for 14-year-olds who need structured, supportive instruction
    */
-  private static getGeneralTextbookPrompt(subject: string, topic: string, contextSection: string): { system: string; user: string } {
+  private static getGeneralTextbookPrompt(subject: string, topic: string, contextSection: string, proficiencyContext: string = ''): { system: string; user: string } {
     const system = `You are a warm, patient, and encouraging CSEC ${subject} tutor writing a lesson for a 14-year-old student who needs clear, structured help with "${topic}". Your goal is to make this topic approachable and build genuine understanding — NOT to produce a wall of text.
 
 You must follow this EXACT 12-section lesson blueprint. Every section is required. Use clear Markdown headings for each.
@@ -690,14 +754,14 @@ For students who want to push further:
 - Use Caribbean examples, names, and contexts (Trinidad, Jamaica, Barbados, Guyana, etc.)
 - NEVER produce a wall of text — use headings, bullets, bold, and whitespace generously
 
-${QUESTION_FORMAT_LIBRARY}${contextSection}`
+${QUESTION_FORMAT_LIBRARY}${proficiencyContext}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
 Your audience is a 14-year-old Caribbean student who needs patient, step-by-step instruction. Follow ALL 12 sections of the lesson blueprint exactly. Make every section count.
 
 CRITICAL: Use the Question Format Library for ALL questions. Every question must have its answer provided. Select the right format (A through J) for each question type.
-
+${proficiencyContext ? '\nIMPORTANT: Adapt the depth and pacing based on the STUDENT PROFICIENCY PROFILE provided in the system prompt.' : ''}
 The lesson should be 3000-4000 words total. Output in clean Markdown format.`
 
     return { system, user }
