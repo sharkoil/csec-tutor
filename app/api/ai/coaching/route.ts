@@ -18,10 +18,12 @@ function getSupabase() {
   return createClient(url, key)
 }
 
-/**
- * Check for cached lesson
- */
-async function getCachedLesson(subject: string, topic: string): Promise<{
+type CacheScope = {
+  contentType: 'common' | 'personalized'
+  userId: string | null
+}
+
+async function getScopedCachedLesson(subject: string, topic: string, scope: CacheScope): Promise<{
   content: string
   model: string
   is_fallback: boolean
@@ -29,17 +31,26 @@ async function getCachedLesson(subject: string, topic: string): Promise<{
 } | null> {
   const supabase = getSupabase()
   if (!supabase) return null
-  
+
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('lessons')
       .select('content, model, is_fallback, created_at')
       .eq('subject', subject)
       .eq('topic', topic)
-      .single()
-    
-    if (error || !data) return null
-    return data
+      .eq('content_type', scope.contentType)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (scope.contentType === 'personalized' && scope.userId) {
+      query = query.eq('user_id', scope.userId)
+    } else {
+      query = query.is('user_id', null)
+    }
+
+    const { data, error } = await query
+    if (error || !data || data.length === 0) return null
+    return data[0]
   } catch {
     return null
   }
@@ -48,22 +59,40 @@ async function getCachedLesson(subject: string, topic: string): Promise<{
 /**
  * Cache a generated lesson
  */
-async function cacheLesson(lesson: TextbookLesson): Promise<void> {
+async function cacheLesson(lesson: TextbookLesson, scope: CacheScope): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) return
   
   try {
+    // Replace existing row for this exact cache scope
+    let deleteQuery = supabase
+      .from('lessons')
+      .delete()
+      .eq('subject', lesson.subject)
+      .eq('topic', lesson.topic)
+      .eq('content_type', scope.contentType)
+
+    if (scope.contentType === 'personalized' && scope.userId) {
+      deleteQuery = deleteQuery.eq('user_id', scope.userId)
+    } else {
+      deleteQuery = deleteQuery.is('user_id', null)
+    }
+
+    const { error: deleteError } = await deleteQuery
+    if (deleteError) throw deleteError
+
     const { error } = await supabase
       .from('lessons')
-      .upsert({
+      .insert({
         subject: lesson.subject,
         topic: lesson.topic,
         content: lesson.content,
+        content_type: scope.contentType,
+        user_id: scope.userId,
         model: lesson.model,
         is_fallback: lesson.isFallback,
-        created_at: lesson.generatedAt
-      }, {
-        onConflict: 'subject,topic'
+        created_at: lesson.generatedAt,
+        updated_at: lesson.generatedAt
       })
 
     if (error) {
@@ -84,7 +113,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { subject, topic, format = 'textbook', refresh = false, cacheOnly = false, wizardData } = await request.json()
+    const { subject, topic, format = 'textbook', refresh = false, cacheOnly = false, wizardData, userId } = await request.json()
 
     if (!subject || !topic) {
       return NextResponse.json(
@@ -95,9 +124,14 @@ export async function POST(request: NextRequest) {
 
     // Use the new textbook lesson generator (default)
     if (format === 'textbook') {
+      // User-scoped cache prevents stale generic lessons from overriding wizard-driven quality
+      const scope: CacheScope = userId
+        ? { contentType: 'personalized', userId }
+        : { contentType: 'common', userId: null }
+
       // Check cache first (unless refresh requested)
       if (!refresh) {
-        const cached = await getCachedLesson(subject, topic)
+        const cached = await getScopedCachedLesson(subject, topic, scope)
         if (cached) {
           console.log(`Returning cached lesson for ${subject}/${topic}`)
           return NextResponse.json({
@@ -129,7 +163,7 @@ export async function POST(request: NextRequest) {
       const lesson: TextbookLesson = await AICoach.generateTextbookLesson(subject, topic, wizardData)
       
       // Persist cache before returning so review mode is reliable and inference is not wasted
-      await cacheLesson(lesson)
+      await cacheLesson(lesson, scope)
       
       return NextResponse.json({
         // New textbook format

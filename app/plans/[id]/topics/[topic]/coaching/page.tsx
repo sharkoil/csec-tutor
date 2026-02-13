@@ -927,7 +927,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
       const response = await fetch('/api/ai/coaching', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, topic, cacheOnly: true })
+        body: JSON.stringify({ subject, topic, cacheOnly: true, userId: user?.id })
       })
 
       if (!response.ok) throw new Error('Failed to load cached lesson')
@@ -957,6 +957,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
           subject: plan.subject,
           topic,
           userLevel: 'intermediate',
+          userId: user?.id,
           wizardData: plan.wizard_data || undefined
         })
       })
