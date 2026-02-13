@@ -53,7 +53,7 @@ async function cacheLesson(lesson: TextbookLesson): Promise<void> {
   if (!supabase) return
   
   try {
-    await supabase
+    const { error } = await supabase
       .from('lessons')
       .upsert({
         subject: lesson.subject,
@@ -65,8 +65,13 @@ async function cacheLesson(lesson: TextbookLesson): Promise<void> {
       }, {
         onConflict: 'subject,topic'
       })
+
+    if (error) {
+      throw error
+    }
   } catch (error) {
     console.error('Failed to cache lesson:', error)
+    throw error
   }
 }
 
@@ -79,7 +84,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { subject, topic, format = 'textbook', refresh = false, wizardData } = await request.json()
+    const { subject, topic, format = 'textbook', refresh = false, cacheOnly = false, wizardData } = await request.json()
 
     if (!subject || !topic) {
       return NextResponse.json(
@@ -110,13 +115,21 @@ export async function POST(request: NextRequest) {
             pacing_notes: ''
           })
         }
+
+        // In review mode, never regenerate if cache is missing
+        if (cacheOnly) {
+          return NextResponse.json(
+            { error: 'Cached lesson not found' },
+            { status: 404 }
+          )
+        }
       }
       
       // Generate new lesson
       const lesson: TextbookLesson = await AICoach.generateTextbookLesson(subject, topic, wizardData)
       
-      // Cache the lesson (async, don't wait)
-      cacheLesson(lesson).catch(err => console.error('Cache error:', err))
+      // Persist cache before returning so review mode is reliable and inference is not wasted
+      await cacheLesson(lesson)
       
       return NextResponse.json({
         // New textbook format

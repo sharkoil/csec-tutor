@@ -927,7 +927,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
       const response = await fetch('/api/ai/coaching', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, topic })
+        body: JSON.stringify({ subject, topic, cacheOnly: true })
       })
 
       if (!response.ok) throw new Error('Failed to load cached lesson')
@@ -1110,17 +1110,20 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <AlertTriangle className="h-6 w-6 text-amber-500" />
-                <span>Lesson Not Found</span>
+                <span>Saved Lesson Not Found</span>
               </CardTitle>
               <CardDescription>
-                We couldn't load the cached lesson. This can happen if the lesson cache was cleared.
-                You can regenerate the lesson below.
+                We couldn't load your saved lesson from cache. Review mode now only loads saved lessons
+                to avoid unnecessary inference costs.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button onClick={generateCoaching} size="lg" className="w-full">
-                Regenerate Lesson
+            <CardContent className="space-y-3">
+              <Button onClick={() => loadCachedLesson(plan.subject)} size="lg" className="w-full" variant="outline">
+                Retry Loading Saved Lesson
               </Button>
+              <p className="text-xs text-gray-500 text-center">
+                If this keeps happening, the lessons table may not be set up in Supabase yet.
+              </p>
             </CardContent>
           </Card>
         )}
