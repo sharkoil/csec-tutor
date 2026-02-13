@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap } from 'lucide-react'
+import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { renderMathInText, containsMath } from '@/components/math-renderer'
 
@@ -46,6 +46,35 @@ interface CoachingResponse {
 }
 
 /**
+ * Collapsible answer reveal toggle.
+ * Answers are hidden by default — the student clicks to reveal them.
+ */
+function AnswerReveal({ children, label = 'Show Answer' }: { children: React.ReactNode; label?: string }) {
+  const [revealed, setRevealed] = useState(false)
+
+  return (
+    <div className="my-4">
+      <button
+        onClick={() => setRevealed(!revealed)}
+        className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-colors duration-200 border shadow-sm
+          ${revealed
+            ? 'bg-green-100 hover:bg-green-200 text-green-800 border-green-300'
+            : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300 hover:border-gray-400'
+          }`}
+      >
+        {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        {revealed ? 'Hide Answer' : label}
+      </button>
+      {revealed && (
+        <div className="mt-3 pl-1 border-l-4 border-green-300">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Premium markdown renderer with question format detection
  * 
  * Detects the Question Format Library patterns (blockquote-based questions,
@@ -62,6 +91,8 @@ function renderMarkdown(markdown: string): React.ReactNode {
   let listItems: string[] = []
   let listType: 'ul' | 'ol' | null = null
   let blockquoteLines: string[] = []
+  let answerKeyElements: React.ReactNode[] = []
+  let collectingAnswerKey = false
 
   const flushList = () => {
     if (listItems.length > 0 && listType) {
@@ -116,10 +147,9 @@ function renderMarkdown(markdown: string): React.ReactNode {
   }
 
   /**
-   * Render the inner content of a question card with special handling for 
-   * answers, steps, options, and annotations
+   * Render individual lines within a question card (answers, steps, options, annotations)
    */
-  const renderCardContent = (rawLines: string[], type: string): React.ReactNode => {
+  const renderCardLines = (rawLines: string[], type: string): React.ReactNode => {
     const contentElements: React.ReactNode[] = []
 
     for (let j = 0; j < rawLines.length; j++) {
@@ -296,6 +326,44 @@ function renderMarkdown(markdown: string): React.ReactNode {
   }
 
   /**
+   * Render card content with automatic answer reveal toggle.
+   * Detects where answers begin and wraps them in a collapsible AnswerReveal.
+   */
+  const renderCardContent = (rawLines: string[], type: string): React.ReactNode => {
+    let answerStart = -1
+    for (let j = 0; j < rawLines.length; j++) {
+      const ln = rawLines[j]
+      if (
+        ln.match(/^✅\s*\*\*Answer:?\*\*/i) ||
+        ln.match(/^✅\s*\*\*Model Answer:?\*\*/i) ||
+        ln.match(/^📋\s*\*\*Answer Key:?\*\*/i)
+      ) {
+        answerStart = (j > 0 && rawLines[j - 1].match(/^[-*_]{3,}$/)) ? j - 1 : j
+        break
+      }
+      if (type === 'mcq' && ln.match(/^📝\s*\*/)) {
+        answerStart = j
+        break
+      }
+    }
+    if (answerStart === -1) return renderCardLines(rawLines, type)
+
+    const questionLines = rawLines.slice(0, answerStart)
+    const answerLines = rawLines.slice(answerStart)
+    const revealLabel = type === 'practice-set' ? 'Show Answer Key' :
+                        type === 'extended' ? 'Show Model Answer' : 'Show Answer'
+
+    return (
+      <>
+        {renderCardLines(questionLines, type)}
+        <AnswerReveal label={revealLabel}>
+          {renderCardLines(answerLines, type)}
+        </AnswerReveal>
+      </>
+    )
+  }
+
+  /**
    * Flush accumulated blockquote lines, detecting question type and rendering as a styled card
    */
   const flushBlockquote = () => {
@@ -335,6 +403,18 @@ function renderMarkdown(markdown: string): React.ReactNode {
     }
 
     blockquoteLines = []
+  }
+
+  const flushAnswerKey = () => {
+    if (answerKeyElements.length > 0) {
+      elements.push(
+        <AnswerReveal key={`reveal-ak-${elements.length}`} label="Show Answer Key">
+          <>{answerKeyElements}</>
+        </AnswerReveal>
+      )
+      answerKeyElements = []
+    }
+    collectingAnswerKey = false
   }
 
   const formatInline = (text: string): React.ReactNode => {
@@ -380,7 +460,39 @@ function renderMarkdown(markdown: string): React.ReactNode {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    
+
+    // === Answer key collection mode ===
+    if (collectingAnswerKey) {
+      if (line.startsWith('#') || line.startsWith('>') || line.startsWith('```')) {
+        flushAnswerKey()
+        // Fall through to normal processing
+      } else {
+        if (line.trim() === '') {
+          answerKeyElements.push(<div key={`ak-space-${i}`} className="h-2" />)
+        } else if (line.match(/^\d+\.\s+/)) {
+          answerKeyElements.push(
+            <div key={`ak-item-${i}`} className="py-1.5 pl-4 border-l-2 border-green-200 ml-2 my-1 text-gray-800">
+              {formatInline(line)}
+            </div>
+          )
+        } else if (line.match(/^[-*]\s+/)) {
+          answerKeyElements.push(
+            <div key={`ak-li-${i}`} className="flex items-start gap-2 my-1 ml-6">
+              <span className="text-gray-400 mt-1.5 flex-shrink-0">•</span>
+              <span className="text-gray-700 leading-relaxed">{formatInline(line.replace(/^[-*]\s+/, ''))}</span>
+            </div>
+          )
+        } else {
+          answerKeyElements.push(
+            <p key={`ak-p-${i}`} className="pl-4 ml-2 text-gray-700 leading-relaxed">
+              {formatInline(line)}
+            </p>
+          )
+        }
+        continue
+      }
+    }
+
     // Code block handling
     if (line.startsWith('```')) {
       if (inCodeBlock) {
@@ -453,16 +565,18 @@ function renderMarkdown(markdown: string): React.ReactNode {
       continue
     }
 
-    // Standalone answer line outside blockquotes
+    // Standalone answer line outside blockquotes — hidden by default
     if (line.match(/^✅\s*\*\*Answer:?\*\*/i)) {
       flushList()
       elements.push(
-        <div key={`answer-${i}`} className="lesson-answer-card mt-3 mb-2 p-3 bg-green-50 border border-green-300 rounded-lg">
-          <div className="flex items-start gap-2">
-            <span className="text-green-600 text-lg flex-shrink-0 mt-0.5">✅</span>
-            <div className="text-green-900 font-medium leading-relaxed">{formatInline(line.replace(/^✅\s*\*\*Answer:?\*\*\s*/i, ''))}</div>
+        <AnswerReveal key={`reveal-answer-${i}`} label="Show Answer">
+          <div className="lesson-answer-card p-3 bg-green-50 border border-green-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-green-600 text-lg flex-shrink-0 mt-0.5">✅</span>
+              <div className="text-green-900 font-medium leading-relaxed">{formatInline(line.replace(/^✅\s*\*\*Answer:?\*\*\s*/i, ''))}</div>
+            </div>
           </div>
-        </div>
+        </AnswerReveal>
       )
       continue
     }
@@ -496,11 +610,13 @@ function renderMarkdown(markdown: string): React.ReactNode {
       continue
     }
 
-    // Answer key header outside blockquotes
+    // Answer key header outside blockquotes — start collecting for reveal toggle
     if (line.match(/^📋\s*\*\*Answer Key:?\*\*/i)) {
       flushList()
-      elements.push(
-        <div key={`ak-${i}`} className="mt-6 mb-3 pt-4 border-t-2 border-green-300">
+      collectingAnswerKey = true
+      answerKeyElements = []
+      answerKeyElements.push(
+        <div key={`ak-${i}`} className="mt-2 mb-3 pt-4 border-t-2 border-green-300">
           <div className="text-green-700 font-bold text-lg flex items-center gap-2">
             <span>📋</span> Answer Key
           </div>
@@ -584,6 +700,7 @@ function renderMarkdown(markdown: string): React.ReactNode {
   
   flushList()
   flushBlockquote()
+  flushAnswerKey()
   
   return elements
 }
