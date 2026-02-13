@@ -789,6 +789,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [isReviewMode, setIsReviewMode] = useState(false)
+  const [isLoadingReview, setIsLoadingReview] = useState(false)
+  const [reviewError, setReviewError] = useState(false)
   const topic = decodeURIComponent(encodedTopic)
   
   // Cycle through loading messages every 3 seconds
@@ -919,6 +921,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
    * Load cached lesson content (for review mode)
    */
   const loadCachedLesson = async (subject: string) => {
+    setIsLoadingReview(true)
+    setReviewError(false)
     try {
       const response = await fetch('/api/ai/coaching', {
         method: 'POST',
@@ -934,7 +938,9 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
       setCoaching(coachingData)
     } catch (error) {
       console.error('Error loading cached lesson:', error)
-      // Don't show fallback content for review mode — just show a message
+      setReviewError(true)
+    } finally {
+      setIsLoadingReview(false)
     }
   }
 
@@ -1082,7 +1088,44 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
           </p>
         </div>
 
-        {!coaching && !isGenerating && (
+        {/* Loading state for review mode */}
+        {isLoadingReview && (
+          <Card>
+            <CardContent className="text-center py-12">
+              <div className="relative mx-auto w-16 h-16 mb-6">
+                <div className="absolute inset-0 rounded-full bg-blue-100 animate-ping opacity-25"></div>
+                <div className="relative flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
+                  <Loader2 className="h-8 w-8 animate-spin text-white" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading your lesson...</h3>
+              <p className="text-gray-500 text-sm">Retrieving your saved content for {topic}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Review mode error — offer to regenerate */}
+        {reviewError && !coaching && !isGenerating && (
+          <Card className="border-amber-300">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <AlertTriangle className="h-6 w-6 text-amber-500" />
+                <span>Lesson Not Found</span>
+              </CardTitle>
+              <CardDescription>
+                We couldn't load the cached lesson. This can happen if the lesson cache was cleared.
+                You can regenerate the lesson below.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={generateCoaching} size="lg" className="w-full">
+                Regenerate Lesson
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!coaching && !isGenerating && !isLoadingReview && !reviewError && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">

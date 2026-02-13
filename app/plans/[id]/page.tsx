@@ -232,7 +232,12 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
                         </div>
                       </div>
                       {topicProgress.coaching_completed ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/coaching`}>
+                          <Button size="sm" variant="outline" className="border-green-300 text-green-700 hover:bg-green-50">
+                            <CheckCircle className="h-4 w-4 mr-1.5" />
+                            Review Lesson
+                          </Button>
+                        </Link>
                       ) : (
                         <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/coaching`}>
                           <Button size="sm" variant="outline">Start</Button>
@@ -248,13 +253,21 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
                         }`} />
                         <div>
                           <div className="font-medium text-sm">Practice Questions</div>
-                          <div className="text-xs text-gray-600">Test your knowledge</div>
+                          <div className="text-xs text-gray-600">
+                            {topicProgress.practice_completed && topicProgress.practice_score !== undefined
+                              ? `Score: ${topicProgress.practice_score}%`
+                              : 'Test your knowledge'}
+                          </div>
                         </div>
                       </div>
                       {topicProgress.practice_completed ? (
-                        <div className="text-right">
+                        <div className="flex items-center space-x-2">
                           <CheckCircle className="h-5 w-5 text-green-600" />
-                          <div className="text-xs text-gray-600">{topicProgress.practice_score}%</div>
+                          <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/practice?review=true`}>
+                            <Button size="sm" variant="ghost" className="text-blue-600 hover:text-blue-700">
+                              Practice Again
+                            </Button>
+                          </Link>
                         </div>
                       ) : topicProgress.coaching_completed ? (
                         <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/practice`}>
@@ -273,13 +286,21 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
                         }`} />
                         <div>
                           <div className="font-medium text-sm">Practice Exam</div>
-                          <div className="text-xs text-gray-600">Final assessment</div>
+                          <div className="text-xs text-gray-600">
+                            {topicProgress.exam_completed && topicProgress.exam_score !== undefined
+                              ? `Score: ${topicProgress.exam_score}%`
+                              : 'Final assessment'}
+                          </div>
                         </div>
                       </div>
                       {topicProgress.exam_completed ? (
-                        <div className="text-right">
+                        <div className="flex items-center space-x-2">
                           <CheckCircle className="h-5 w-5 text-green-600" />
-                          <div className="text-xs text-gray-600">{topicProgress.exam_score}%</div>
+                          <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/exam?retake=true`}>
+                            <Button size="sm" variant="ghost" className="text-blue-600 hover:text-blue-700">
+                              Retake
+                            </Button>
+                          </Link>
                         </div>
                       ) : topicProgress.practice_completed ? (
                         <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/exam`}>
