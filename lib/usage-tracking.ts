@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { createClient } from '@supabase/supabase-js'
 
 export interface UsageRecord {
   user_id?: string
@@ -16,10 +16,28 @@ export interface UsageRecord {
 }
 
 /**
+ * Get a server-side Supabase client with the service role key.
+ * trackUsage runs inside API routes and needs elevated permissions
+ * to INSERT into ai_usage regardless of RLS configuration.
+ */
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key || url.includes('placeholder')) return null
+  return createClient(url, key)
+}
+
+/**
  * Track AI usage for cost monitoring and analytics
  */
 export async function trackUsage(record: UsageRecord): Promise<void> {
   try {
+    const supabase = getServiceClient()
+    if (!supabase) {
+      console.warn('Usage tracking skipped: no Supabase client available')
+      return
+    }
+
     const { error } = await supabase
       .from('ai_usage')
       .insert({
@@ -73,6 +91,9 @@ export async function getUsageStats(startDate?: Date, endDate?: Date) {
   const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days ago
   const end = endDate || new Date()
 
+  const supabase = getServiceClient()
+  if (!supabase) throw new Error('No Supabase client available')
+
   const { data, error } = await supabase.rpc('get_usage_stats', {
     start_date: start.toISOString(),
     end_date: end.toISOString()
@@ -90,6 +111,9 @@ export async function getUsageStats(startDate?: Date, endDate?: Date) {
  * Get recent usage records for admin dashboard
  */
 export async function getRecentUsage(limit: number = 50) {
+  const supabase = getServiceClient()
+  if (!supabase) throw new Error('No Supabase client available')
+
   const { data, error } = await supabase
     .from('ai_usage')
     .select('*')
