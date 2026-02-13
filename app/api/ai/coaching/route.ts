@@ -23,6 +23,54 @@ type CacheScope = {
   userId: string | null
 }
 
+type WizardData = {
+  target_grade?: string
+  proficiency_level?: string
+  topic_confidence?: Record<string, string>
+  learning_style?: string
+}
+
+const LESSON_PROMPT_VERSION = 'v2-12-section'
+
+function buildWizardSignature(wizardData?: WizardData): string {
+  if (!wizardData) return 'no-wizard'
+
+  const normalized = {
+    target_grade: wizardData.target_grade || 'unknown',
+    proficiency_level: wizardData.proficiency_level || 'unknown',
+    learning_style: wizardData.learning_style || 'blended',
+    topic_confidence: wizardData.topic_confidence || {}
+  }
+
+  return JSON.stringify(normalized)
+}
+
+function serializeCachedContent(content: string, wizardData?: WizardData): string {
+  const metadata = {
+    v: LESSON_PROMPT_VERSION,
+    w: buildWizardSignature(wizardData)
+  }
+  return `<!-- LESSON_CACHE_META:${JSON.stringify(metadata)} -->\n${content}`
+}
+
+function parseCachedContent(content: string): { cleanContent: string; version: string | null; wizardSignature: string | null } {
+  const match = content.match(/^<!--\s*LESSON_CACHE_META:(.*?)\s*-->\n?/)
+  if (!match) {
+    return { cleanContent: content, version: null, wizardSignature: null }
+  }
+
+  try {
+    const parsed = JSON.parse(match[1]) as { v?: string; w?: string }
+    return {
+      cleanContent: content.replace(/^<!--\s*LESSON_CACHE_META:.*?\s*-->\n?/, ''),
+      version: parsed.v || null,
+      wizardSignature: parsed.w || null
+    }
+  } catch {
+    return { cleanContent: content, version: null, wizardSignature: null }
+  }
+}
+
 async function getScopedCachedLesson(subject: string, topic: string, scope: CacheScope): Promise<{
   content: string
   model: string
@@ -56,10 +104,33 @@ async function getScopedCachedLesson(subject: string, topic: string, scope: Cach
   }
 }
 
+function shouldUseCachedLesson(
+  rawContent: string,
+  wizardData?: WizardData
+): { ok: boolean; content: string } {
+  const parsed = parseCachedContent(rawContent)
+
+  // If metadata is missing, this is legacy/stale cache from earlier prompt versions.
+  if (!parsed.version || !parsed.wizardSignature) {
+    return { ok: false, content: parsed.cleanContent }
+  }
+
+  if (parsed.version !== LESSON_PROMPT_VERSION) {
+    return { ok: false, content: parsed.cleanContent }
+  }
+
+  const expectedSignature = buildWizardSignature(wizardData)
+  if (parsed.wizardSignature !== expectedSignature) {
+    return { ok: false, content: parsed.cleanContent }
+  }
+
+  return { ok: true, content: parsed.cleanContent }
+}
+
 /**
  * Cache a generated lesson
  */
-async function cacheLesson(lesson: TextbookLesson, scope: CacheScope): Promise<void> {
+async function cacheLesson(lesson: TextbookLesson, scope: CacheScope, wizardData?: WizardData): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) return
   
@@ -86,7 +157,7 @@ async function cacheLesson(lesson: TextbookLesson, scope: CacheScope): Promise<v
       .insert({
         subject: lesson.subject,
         topic: lesson.topic,
-        content: lesson.content,
+        content: serializeCachedContent(lesson.content, wizardData),
         content_type: scope.contentType,
         user_id: scope.userId,
         model: lesson.model,
@@ -133,21 +204,31 @@ export async function POST(request: NextRequest) {
       if (!refresh) {
         const cached = await getScopedCachedLesson(subject, topic, scope)
         if (cached) {
+          const cacheCheck = shouldUseCachedLesson(cached.content, wizardData)
+          if (!cacheCheck.ok) {
+            if (cacheOnly) {
+              return NextResponse.json(
+                { error: 'Cached lesson does not match current learning profile' },
+                { status: 404 }
+              )
+            }
+          } else {
           console.log(`Returning cached lesson for ${subject}/${topic}`)
           return NextResponse.json({
-            narrativeContent: cached.content,
+            narrativeContent: cacheCheck.content,
             model: cached.model,
             isFallback: cached.is_fallback,
             generatedAt: cached.created_at,
             cached: true,
             
             // Legacy fields
-            explanation: cached.content,
+            explanation: cacheCheck.content,
             examples: [],
             key_points: [],
             practice_tips: [],
             pacing_notes: ''
           })
+          }
         }
 
         // In review mode, never regenerate if cache is missing
@@ -163,7 +244,7 @@ export async function POST(request: NextRequest) {
       const lesson: TextbookLesson = await AICoach.generateTextbookLesson(subject, topic, wizardData)
       
       // Persist cache before returning so review mode is reliable and inference is not wasted
-      await cacheLesson(lesson, scope)
+      await cacheLesson(lesson, scope, wizardData)
       
       return NextResponse.json({
         // New textbook format

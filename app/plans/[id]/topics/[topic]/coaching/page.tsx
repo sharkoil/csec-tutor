@@ -791,6 +791,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
   const [isReviewMode, setIsReviewMode] = useState(false)
   const [isLoadingReview, setIsLoadingReview] = useState(false)
   const [reviewError, setReviewError] = useState(false)
+  const [generationError, setGenerationError] = useState<string | null>(null)
   const topic = decodeURIComponent(encodedTopic)
   
   // Cycle through loading messages every 3 seconds
@@ -872,7 +873,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
         if (mockProgress[key]?.coaching_completed) {
           setIsReviewMode(true)
           // Auto-load cached lesson for review
-          loadCachedLesson(mockPlan.subject)
+          loadCachedLesson(mockPlan.subject, mockPlan.wizard_data)
         }
 
         setIsLoading(false)
@@ -907,7 +908,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
       if (progressData?.coaching_completed) {
         setIsReviewMode(true)
         // Auto-load the cached lesson so the user can review it
-        loadCachedLesson(data.subject)
+        loadCachedLesson(data.subject, data.wizard_data)
       }
     } catch (error) {
       console.error('Error fetching plan:', error)
@@ -920,14 +921,20 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
   /**
    * Load cached lesson content (for review mode)
    */
-  const loadCachedLesson = async (subject: string) => {
+  const loadCachedLesson = async (subject: string, wizardData?: any) => {
     setIsLoadingReview(true)
     setReviewError(false)
     try {
       const response = await fetch('/api/ai/coaching', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, topic, cacheOnly: true, userId: user?.id })
+        body: JSON.stringify({
+          subject,
+          topic,
+          cacheOnly: true,
+          userId: user?.id,
+          wizardData: wizardData || plan?.wizard_data || undefined
+        })
       })
 
       if (!response.ok) throw new Error('Failed to load cached lesson')
@@ -948,6 +955,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
     if (!plan) return
 
     setIsGenerating(true)
+    setGenerationError(null)
     try {
       // Call the server-side API route for OpenRouter
       const response = await fetch('/api/ai/coaching', {
@@ -975,27 +983,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
       setCoaching(coachingData)
     } catch (error) {
       console.error('Error generating coaching:', error)
-      // Provide demo fallback content when AI is unavailable
-      setCoaching({
-        explanation: `Welcome to the fundamentals of ${topic}!\n\nThis topic is an essential part of your CSEC ${plan.subject} curriculum. Understanding ${topic} will help you build a strong foundation for more advanced concepts.\n\nKey areas covered include the basic principles, common applications, and problem-solving techniques used in CSEC examinations.`,
-        examples: [
-          `Example 1: A typical CSEC question on ${topic} might ask you to identify key components or solve a basic problem.`,
-          `Example 2: You may be asked to apply ${topic} concepts to real-world Caribbean scenarios.`,
-          `Example 3: Past papers often include questions that combine ${topic} with related topics from the syllabus.`
-        ],
-        key_points: [
-          `Understand the fundamental definitions and terminology of ${topic}`,
-          'Practice regularly with past CSEC examination questions',
-          'Pay attention to the mark scheme and how answers should be structured',
-          'Connect concepts to everyday Caribbean life for better retention',
-          'Review worked examples before attempting practice problems'
-        ],
-        practice_tips: [
-          `Start with the basics and gradually increase difficulty as you become more confident with ${topic}.`,
-          'Time yourself when practicing to simulate exam conditions.',
-          'Create summary notes and revision cards for quick review before exams.'
-        ]
-      })
+      setGenerationError('Could not generate the personalized lesson. Please retry.')
     } finally {
       setIsGenerating(false)
     }
@@ -1119,7 +1107,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button onClick={() => loadCachedLesson(plan.subject)} size="lg" className="w-full" variant="outline">
+              <Button onClick={() => loadCachedLesson(plan.subject, plan?.wizard_data)} size="lg" className="w-full" variant="outline">
                 Retry Loading Saved Lesson
               </Button>
               <p className="text-xs text-gray-500 text-center">
@@ -1129,7 +1117,24 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
           </Card>
         )}
 
-        {!coaching && !isGenerating && !isLoadingReview && !reviewError && (
+        {generationError && !coaching && !isGenerating && !isLoadingReview && !reviewError && (
+          <Card className="border-red-300">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <AlertTriangle className="h-6 w-6 text-red-500" />
+                <span>Generation Failed</span>
+              </CardTitle>
+              <CardDescription>{generationError}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={generateCoaching} size="lg" className="w-full">
+                Retry Generating Lesson
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!coaching && !isGenerating && !isLoadingReview && !reviewError && !generationError && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
