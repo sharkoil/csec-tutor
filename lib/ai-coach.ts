@@ -18,13 +18,20 @@ const WRITING_SUBJECTS = ['English A', 'English B', 'History', 'Geography', 'Soc
 
 function getOpenAIClient() {
   const openrouterApiKey = process.env.OPENROUTER_API_KEY
+  console.log('[getOpenAIClient] OpenRouter API key present:', !!openrouterApiKey)
+  
+  if (!openrouterApiKey) {
+    console.error('[getOpenAIClient] No OpenRouter API key found!')
+    throw new Error('OpenRouter API key is required but not configured')
+  }
+  
   return new OpenAI({
-    apiKey: openrouterApiKey || process.env.OPENAI_API_KEY || 'dummy-key-for-build',
-    baseURL: openrouterApiKey ? 'https://openrouter.ai/api/v1' : undefined,
-    defaultHeaders: openrouterApiKey ? {
+    apiKey: openrouterApiKey,
+    baseURL: 'https://openrouter.ai/api/v1',
+    defaultHeaders: {
       'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
       'X-Title': process.env.NEXT_PUBLIC_APP_NAME || 'CSEC Tutor',
-    } : undefined
+    }
   })
 }
 
@@ -299,54 +306,74 @@ export class AICoach {
       learning_style?: string
     }
   ): Promise<TextbookLesson> {
-    // Get relevant curriculum context
-    const relevantContent = await VectorSearch.searchSimilarContent(
-      `${subject} ${topic} CSEC syllabus concepts explanations examples past papers`,
-      subject,
-      topic,
-      'explanation',
-      8
-    )
-    const contextContent = relevantContent.map((item: { content: string }) => item.content).join('\n\n---\n\n')
+    try {
+      console.log('[AICoach] Generating textbook lesson:', { subject, topic, hasWizardData: !!wizardData })
+      
+      // Get relevant curriculum context
+      const relevantContent = await VectorSearch.searchSimilarContent(
+        `${subject} ${topic} CSEC syllabus concepts explanations examples past papers`,
+        subject,
+        topic,
+        'explanation',
+        8
+      )
+      const contextContent = relevantContent.map((item: { content: string }) => item.content).join('\n\n---\n\n')
+      console.log('[AICoach] Retrieved context content, length:', contextContent.length)
 
-    // Select appropriate prompt based on subject type
-    const prompt = this.getTextbookPrompt(subject, topic, contextContent, wizardData)
-    
-    const openai = getOpenAIClient()
-    const startTime = Date.now()
+      // Select appropriate prompt based on subject type
+      const prompt = this.getTextbookPrompt(subject, topic, contextContent, wizardData)
+      console.log('[AICoach] Generated prompt, system length:', prompt.system.length, 'user length:', prompt.user.length)
+      
+      const openai = getOpenAIClient()
+      const startTime = Date.now()
 
-    // Use callWithFallback for automatic retry with free model on 402
-    const { result: response, model, isFallback } = await callWithFallback(
-      async (modelToUse) => {
-        return await openai.chat.completions.create({
-          model: modelToUse,
-          messages: [
-            { role: 'system', content: prompt.system },
-            { role: 'user', content: prompt.user }
-          ],
-          temperature: 0.65,
-          max_tokens: 8000, // Allow for 3000-4000 word scaffolded lessons
+      console.log('[AICoach] Calling OpenRouter API...')
+      // Use callWithFallback for automatic retry with free model on 402
+      const { result: response, model, isFallback } = await callWithFallback(
+        async (modelToUse) => {
+          console.log('[AICoach] Using model:', modelToUse)
+          return await openai.chat.completions.create({
+            model: modelToUse,
+            messages: [
+              { role: 'system', content: prompt.system },
+              { role: 'user', content: prompt.user }
+            ],
+            temperature: 0.65,
+            max_tokens: 8000, // Allow for 3000-4000 word scaffolded lessons
+          })
+        },
+        'lesson' // Use LESSON tier
+      )
+      
+      const latencyMs = Date.now() - startTime
+      console.log('[AICoach] API call completed:', { latencyMs, model, isFallback })
+
+      // Track usage
+      const usageRecord = extractUsageFromResponse(response, 'textbook-lesson', model, subject, topic)
+      usageRecord.latency_ms = latencyMs
+      trackUsage(usageRecord)
+
+      const content = response.choices[0].message.content || ''
+      console.log('[AICoach] Generated content length:', content.length)
+
+      return {
+        content,
+        model,
+        isFallback,
+        generatedAt: new Date().toISOString(),
+        subject,
+        topic
+      }
+    } catch (error) {
+      console.error('[AICoach] Error generating textbook lesson:', error)
+      if (error instanceof Error) {
+        console.error('[AICoach] Error details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
         })
-      },
-      'lesson' // Use LESSON tier
-    )
-    
-    const latencyMs = Date.now() - startTime
-
-    // Track usage
-    const usageRecord = extractUsageFromResponse(response, 'textbook-lesson', model, subject, topic)
-    usageRecord.latency_ms = latencyMs
-    trackUsage(usageRecord)
-
-    const content = response.choices[0].message.content || ''
-
-    return {
-      content,
-      model,
-      isFallback,
-      generatedAt: new Date().toISOString(),
-      subject,
-      topic
+      }
+      throw error
     }
   }
 

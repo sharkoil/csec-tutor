@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useEffect, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, CheckCircle, Play, RotateCcw } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } from '@/lib/plan-storage'
 
 interface PracticeQuestion {
   id: string
@@ -23,6 +23,8 @@ export default function PracticePage({ params }: { params: Promise<{ id: string;
   const { id: planId, topic: encodedTopic } = use(params)
   const { user, loading } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const isReviewMode = searchParams.get('review') === 'true'
   const [plan, setPlan] = useState<any>(null)
   const [questions, setQuestions] = useState<PracticeQuestion[]>([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -31,6 +33,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string;
   const [isLoading, setIsLoading] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [previousScore, setPreviousScore] = useState<number | null>(null)
   const topic = decodeURIComponent(encodedTopic)
 
   useEffect(() => {
@@ -47,76 +50,37 @@ export default function PracticePage({ params }: { params: Promise<{ id: string;
 
   const fetchPlanAndCheckPrerequisites = async () => {
     try {
-      // Check if this is a mock user (for development/testing)
-      const isMockUser = user?.id.startsWith('user_')
+      // Unified fetch: tries Supabase first, falls back to localStorage
+      const planData = await fetchPlanFromStorage(user!.id, planId)
 
-      if (isMockUser) {
-        // For mock users, load from localStorage
-        const mockPlans = JSON.parse(localStorage.getItem('csec_mock_plans') || '[]')
-        const mockPlan = mockPlans.find((p: any) => p.id === planId)
-
-        if (!mockPlan || !mockPlan.topics.includes(topic)) {
-          router.push(`/plans/${planId}`)
-          return
-        }
-
-        // Check mock progress
-        const mockProgress = JSON.parse(localStorage.getItem('csec_mock_progress') || '{}')
-        const progressKey = `${planId}_${topic}`
-        const progress = mockProgress[progressKey]
-
-        if (!progress?.coaching_completed) {
-          router.push(`/plans/${planId}/topics/${encodeURIComponent(topic)}/coaching`)
-          return
-        }
-
-        if (progress?.practice_completed) {
-          router.push(`/plans/${planId}`)
-          return
-        }
-
-        setPlan(mockPlan)
-        setIsLoading(false)
-        return
-      }
-
-      const { data: planData, error: planError } = await supabase
-        .from('study_plans')
-        .select('*')
-        .eq('id', planId)
-        .eq('user_id', user?.id)
-        .single()
-
-      if (planError) throw planError
-
-      if (!planData.topics.includes(topic)) {
+      if (!planData || !planData.topics.includes(topic)) {
         router.push(`/plans/${planId}`)
         return
       }
 
-      // Check if coaching is completed
-      const { data: progressData } = await supabase
-        .from('progress')
-        .select('*')
-        .eq('plan_id', planId)
-        .eq('user_id', user?.id)
-        .eq('topic', topic)
-        .single()
+      // Check prerequisite progress
+      const progress = await fetchTopicProgress(user!.id, planId, topic)
 
-      if (!progressData?.coaching_completed) {
+      if (!progress?.coaching_completed) {
         router.push(`/plans/${planId}/topics/${encodeURIComponent(topic)}/coaching`)
         return
       }
 
-      if (progressData?.practice_completed) {
+      // Allow access if in review mode, even if already completed
+      if (progress?.practice_completed && !isReviewMode) {
         router.push(`/plans/${planId}`)
         return
+      }
+
+      // Store previous score if reviewing
+      if (progress?.practice_score) {
+        setPreviousScore(progress.practice_score)
       }
 
       setPlan(planData)
     } catch (error) {
       console.error('Error fetching plan:', error)
-      router.push('/dashboard')
+      router.push(`/plans/${planId}`)
     } finally {
       setIsLoading(false)
     }
@@ -230,41 +194,13 @@ export default function PracticePage({ params }: { params: Promise<{ id: string;
       }, 0)
       const score = Math.round((obtainedMarks / totalMarks) * 100)
 
-      // Check if this is a mock user
-      const isMockUser = user?.id.startsWith('user_')
-
-      if (isMockUser) {
-        // For mock users, store progress in localStorage
-        const mockProgress = JSON.parse(localStorage.getItem('csec_mock_progress') || '{}')
-        const key = `${planId}_${topic}`
-        mockProgress[key] = {
-          coaching_completed: true,
-          practice_completed: true,
-          exam_completed: false,
-          practice_score: score
-        }
-        localStorage.setItem('csec_mock_progress', JSON.stringify(mockProgress))
-        setShowResults(true)
-        setIsSubmitting(false)
-        return
-      }
-
-      // Update progress
-      const { error } = await supabase
-        .from('progress')
-        .upsert({
-          user_id: user?.id,
-          plan_id: planId,
-          topic,
-          coaching_completed: true,
-          practice_completed: true,
-          exam_completed: false,
-          practice_score: score
-        }, {
-          onConflict: 'user_id,plan_id,topic'
-        })
-
-      if (error) throw error
+      // Save progress via unified data layer
+      await saveProgress(user!.id, planId, topic, {
+        coaching_completed: true,
+        practice_completed: true,
+        exam_completed: false,
+        practice_score: score,
+      })
 
       setShowResults(true)
     } catch (error) {
@@ -325,21 +261,35 @@ export default function PracticePage({ params }: { params: Promise<{ id: string;
       </nav>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Previous Score Banner - shown when practicing again */}
+        {previousScore !== null && !questions.length && !isGenerating && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-semibold text-blue-900">📊 Previous Attempt</h4>
+                <p className="text-sm text-blue-700">Your last score was <span className="font-bold">{previousScore}%</span></p>
+              </div>
+              <div className="text-2xl font-bold text-blue-600">{previousScore}%</div>
+            </div>
+          </div>
+        )}
+
         {!questions.length && !isGenerating && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <Play className="h-6 w-6 text-green-600" />
-                <span>Ready to Practice?</span>
+                <span>{isReviewMode ? 'Practice Again?' : 'Ready to Practice?'}</span>
               </CardTitle>
               <CardDescription>
-                Test your knowledge of {topic} with AI-generated practice questions
-                based on CSEC past papers and curriculum.
+                {isReviewMode
+                  ? `Practice more ${topic} questions to reinforce your learning.`
+                  : `Test your knowledge of ${topic} with AI-generated practice questions based on CSEC past papers and curriculum.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button onClick={generateQuestions} size="lg" className="w-full">
-                Generate Practice Questions
+                {isReviewMode ? 'Generate New Questions' : 'Generate Practice Questions'}
               </Button>
             </CardContent>
           </Card>

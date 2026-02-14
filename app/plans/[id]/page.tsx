@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, BookOpen, Play, Award, CheckCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { fetchPlan as fetchPlanFromStorage, fetchProgress as fetchProgressFromStorage } from '@/lib/plan-storage'
 import { StudyPlan, Progress } from '@/types'
 
 export default function PlanPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,75 +32,19 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
 
   const fetchPlanAndProgress = async () => {
     try {
-      // Check if this is a mock user (for development/testing)
-      const isMockUser = user?.id.startsWith('user_')
+      // Unified fetch: tries Supabase first, falls back to localStorage
+      const planData = await fetchPlanFromStorage(user!.id, planId)
 
-      if (isMockUser) {
-        // For mock users, load from localStorage
-        const mockPlans = JSON.parse(localStorage.getItem('csec_mock_plans') || '[]')
-        const mockPlan = mockPlans.find((p: any) => p.id === planId)
-
-        if (!mockPlan) {
-          console.error('Plan not found')
-          router.push('/dashboard')
-          return
-        }
-
-        // Check for stored progress in localStorage
-        const storedProgress = JSON.parse(localStorage.getItem('csec_mock_progress') || '{}')
-
-        // Create mock progress data, checking localStorage for saved progress
-        const mockProgress = mockPlan.topics.map((topic: string) => {
-          const key = `${planId}_${topic}`
-          const savedProgress = storedProgress[key]
-          return {
-            id: `progress_${topic}`,
-            user_id: user!.id,
-            plan_id: planId,
-            topic,
-            coaching_completed: savedProgress?.coaching_completed || false,
-            practice_completed: savedProgress?.practice_completed || false,
-            exam_completed: savedProgress?.exam_completed || false,
-            practice_score: savedProgress?.practice_score,
-            exam_score: savedProgress?.exam_score,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        })
-
-        setPlan(mockPlan)
-        setProgress(mockProgress)
-        setIsLoading(false)
+      if (!planData) {
+        console.error('Plan not found in Supabase or localStorage')
+        router.push('/dashboard')
         return
       }
 
-      // For real Supabase users, fetch from database
-      const { data: planData, error: planError } = await supabase
-        .from('study_plans')
-        .select('*')
-        .eq('id', planId)
-        .eq('user_id', user?.id)
-        .single()
-
-      if (planError) {
-        console.error('Error fetching plan:', planError)
-        throw planError
-      }
-
-      // Fetch progress for this plan
-      const { data: progressData, error: progressError } = await supabase
-        .from('progress')
-        .select('*')
-        .eq('plan_id', planId)
-        .eq('user_id', user?.id)
-
-      if (progressError) {
-        console.error('Error fetching progress:', progressError)
-        throw progressError
-      }
+      const progressData = await fetchProgressFromStorage(user!.id, planId, planData.topics)
 
       setPlan(planData)
-      setProgress(progressData || [])
+      setProgress(progressData)
     } catch (error) {
       console.error('Error fetching plan:', error)
       router.push('/dashboard')

@@ -10,7 +10,7 @@ import { Navbar } from '@/components/navbar'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Loader2, Plus, BookOpen, Play, Award, Zap, Clock, TrendingUp, ArrowRight, CheckCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { fetchPlans as fetchPlansFromStorage } from '@/lib/plan-storage'
 import { StudyPlan } from '@/types'
 
 export default function Dashboard() {
@@ -33,56 +33,11 @@ export default function Dashboard() {
 
   const fetchStudyPlans = async () => {
     try {
-      // For mock users, generate sample study plans
-      if (user?.id.startsWith('user_')) {
-        // Check if mock plans already exist in localStorage
-        const existingPlans = localStorage.getItem('csec_mock_plans')
-        if (existingPlans) {
-          setStudyPlans(JSON.parse(existingPlans))
-          setIsLoading(false)
-          return
-        }
-
-        // Generate sample plans and store them
-        const samplePlans: StudyPlan[] = [
-          {
-            id: 'plan_1',
-            user_id: user.id,
-            subject: 'Mathematics',
-            topics: ['Algebra', 'Geometry', 'Trigonometry', 'Calculus'],
-            status: 'active' as const,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          {
-            id: 'plan_2',
-            user_id: user.id,
-            subject: 'English A',
-            topics: ['Literature', 'Writing', 'Communication'],
-            status: 'active' as const,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        ]
-        
-        // Store in localStorage for other pages to access
-        localStorage.setItem('csec_mock_plans', JSON.stringify(samplePlans))
-        setStudyPlans(samplePlans)
-        setIsLoading(false)
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('study_plans')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setStudyPlans(data || [])
+      // Unified fetch: tries Supabase first, falls back to localStorage
+      const plans = await fetchPlansFromStorage(user!.id)
+      setStudyPlans(plans)
     } catch (error) {
       console.error('Error fetching study plans:', error)
-      // Fallback to empty plans on error
       setStudyPlans([])
     } finally {
       setIsLoading(false)

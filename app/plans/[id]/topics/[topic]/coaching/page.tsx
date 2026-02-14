@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap, Eye, EyeOff } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } from '@/lib/plan-storage'
 import { renderMathInText, containsMath } from '@/components/math-renderer'
 
 // Enhanced CoachingResponse with narrative content and fallback info
@@ -852,63 +852,26 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
 
   const fetchPlan = async () => {
     try {
-      // Check if this is a mock user (for development/testing)
-      const isMockUser = user?.id.startsWith('user_')
+      // Unified fetch: tries Supabase first, falls back to localStorage
+      const planData = await fetchPlanFromStorage(user!.id, planId)
 
-      if (isMockUser) {
-        // For mock users, load from localStorage
-        const mockPlans = JSON.parse(localStorage.getItem('csec_mock_plans') || '[]')
-        const mockPlan = mockPlans.find((p: any) => p.id === planId)
-
-        if (!mockPlan || !mockPlan.topics.includes(topic)) {
-          router.push(`/plans/${planId}`)
-          return
-        }
-
-        setPlan(mockPlan)
-
-        // Check if coaching is already completed for mock users
-        const mockProgress = JSON.parse(localStorage.getItem('csec_mock_progress') || '{}')
-        const key = `${planId}_${topic}`
-        if (mockProgress[key]?.coaching_completed) {
-          setIsReviewMode(true)
-          // Auto-load cached lesson for review
-          loadCachedLesson(mockPlan.subject, mockPlan.wizard_data)
-        }
-
-        setIsLoading(false)
+      if (!planData) {
+        router.push('/dashboard')
         return
       }
 
-      const { data, error } = await supabase
-        .from('study_plans')
-        .select('*')
-        .eq('id', planId)
-        .eq('user_id', user?.id)
-        .single()
-
-      if (error) throw error
-
-      if (!data.topics.includes(topic)) {
+      if (!planData.topics.includes(topic)) {
         router.push(`/plans/${planId}`)
         return
       }
 
-      setPlan(data)
+      setPlan(planData)
 
-      // Check if coaching is already completed — if so, load cached content for review
-      const { data: progressData } = await supabase
-        .from('progress')
-        .select('*')
-        .eq('plan_id', planId)
-        .eq('user_id', user?.id)
-        .eq('topic', topic)
-        .single()
-
-      if (progressData?.coaching_completed) {
+      // Check if coaching is already completed
+      const progress = await fetchTopicProgress(user!.id, planId, topic)
+      if (progress?.coaching_completed) {
         setIsReviewMode(true)
-        // Auto-load the cached lesson so the user can review it
-        loadCachedLesson(data.subject, data.wizard_data)
+        loadCachedLesson(planData.subject, planData.wizard_data)
       }
     } catch (error) {
       console.error('Error fetching plan:', error)
@@ -991,38 +954,11 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
 
   const completeCoaching = async () => {
     try {
-      // Check if this is a mock user
-      const isMockUser = user?.id.startsWith('user_')
-
-      if (isMockUser) {
-        // For mock users, store progress in localStorage
-        const mockProgress = JSON.parse(localStorage.getItem('csec_mock_progress') || '{}')
-        const key = `${planId}_${topic}`
-        mockProgress[key] = {
-          coaching_completed: true,
-          practice_completed: false,
-          exam_completed: false
-        }
-        localStorage.setItem('csec_mock_progress', JSON.stringify(mockProgress))
-        router.push(`/plans/${planId}`)
-        return
-      }
-
-      const { error } = await supabase
-        .from('progress')
-        .upsert({
-          user_id: user?.id,
-          plan_id: planId,
-          topic,
-          coaching_completed: true,
-          practice_completed: false,
-          exam_completed: false
-        }, {
-          onConflict: 'user_id,plan_id,topic'
-        })
-
-      if (error) throw error
-
+      await saveProgress(user!.id, planId, topic, {
+        coaching_completed: true,
+        practice_completed: false,
+        exam_completed: false,
+      })
       router.push(`/plans/${planId}`)
     } catch (error) {
       console.error('Error completing coaching:', error)

@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { AICoach, TextbookLesson } from '@/lib/ai-coach'
+import {
+  WizardData,
+  LESSON_PROMPT_VERSION,
+  buildWizardSignature,
+  serializeCachedContent,
+  parseCachedContent,
+  shouldUseCachedLesson,
+} from '@/lib/lesson-cache'
 
 /**
  * Coaching API Route - Generates deep textbook-quality lessons
@@ -23,53 +31,9 @@ type CacheScope = {
   userId: string | null
 }
 
-type WizardData = {
-  target_grade?: string
-  proficiency_level?: string
-  topic_confidence?: Record<string, string>
-  learning_style?: string
-}
-
-const LESSON_PROMPT_VERSION = 'v2-12-section'
-
-function buildWizardSignature(wizardData?: WizardData): string {
-  if (!wizardData) return 'no-wizard'
-
-  const normalized = {
-    target_grade: wizardData.target_grade || 'unknown',
-    proficiency_level: wizardData.proficiency_level || 'unknown',
-    learning_style: wizardData.learning_style || 'blended',
-    topic_confidence: wizardData.topic_confidence || {}
-  }
-
-  return JSON.stringify(normalized)
-}
-
-function serializeCachedContent(content: string, wizardData?: WizardData): string {
-  const metadata = {
-    v: LESSON_PROMPT_VERSION,
-    w: buildWizardSignature(wizardData)
-  }
-  return `<!-- LESSON_CACHE_META:${JSON.stringify(metadata)} -->\n${content}`
-}
-
-function parseCachedContent(content: string): { cleanContent: string; version: string | null; wizardSignature: string | null } {
-  const match = content.match(/^<!--\s*LESSON_CACHE_META:(.*?)\s*-->\n?/)
-  if (!match) {
-    return { cleanContent: content, version: null, wizardSignature: null }
-  }
-
-  try {
-    const parsed = JSON.parse(match[1]) as { v?: string; w?: string }
-    return {
-      cleanContent: content.replace(/^<!--\s*LESSON_CACHE_META:.*?\s*-->\n?/, ''),
-      version: parsed.v || null,
-      wizardSignature: parsed.w || null
-    }
-  } catch {
-    return { cleanContent: content, version: null, wizardSignature: null }
-  }
-}
+// WizardData, LESSON_PROMPT_VERSION, buildWizardSignature,
+// serializeCachedContent, parseCachedContent, shouldUseCachedLesson
+// are all imported from @/lib/lesson-cache above.
 
 async function getScopedCachedLesson(subject: string, topic: string, scope: CacheScope): Promise<{
   content: string
@@ -102,29 +66,6 @@ async function getScopedCachedLesson(subject: string, topic: string, scope: Cach
   } catch {
     return null
   }
-}
-
-function shouldUseCachedLesson(
-  rawContent: string,
-  wizardData?: WizardData
-): { ok: boolean; content: string } {
-  const parsed = parseCachedContent(rawContent)
-
-  // If metadata is missing, this is legacy/stale cache from earlier prompt versions.
-  if (!parsed.version || !parsed.wizardSignature) {
-    return { ok: false, content: parsed.cleanContent }
-  }
-
-  if (parsed.version !== LESSON_PROMPT_VERSION) {
-    return { ok: false, content: parsed.cleanContent }
-  }
-
-  const expectedSignature = buildWizardSignature(wizardData)
-  if (parsed.wizardSignature !== expectedSignature) {
-    return { ok: false, content: parsed.cleanContent }
-  }
-
-  return { ok: true, content: parsed.cleanContent }
 }
 
 /**
@@ -177,7 +118,12 @@ async function cacheLesson(lesson: TextbookLesson, scope: CacheScope, wizardData
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENROUTER_API_KEY) {
+    // Log API key status for debugging
+    const hasApiKey = !!process.env.OPENROUTER_API_KEY
+    console.log('[Coaching API] OpenRouter API key configured:', hasApiKey)
+    
+    if (!hasApiKey) {
+      console.error('[Coaching API] OpenRouter API key not configured')
       return NextResponse.json(
         { error: 'OpenRouter API key not configured' },
         { status: 500 }
@@ -186,7 +132,10 @@ export async function POST(request: NextRequest) {
 
     const { subject, topic, format = 'textbook', refresh = false, cacheOnly = false, wizardData, userId } = await request.json()
 
+    console.log('[Coaching API] Request:', { subject, topic, format, refresh, cacheOnly, hasWizardData: !!wizardData, userId })
+
     if (!subject || !topic) {
+      console.error('[Coaching API] Missing subject or topic')
       return NextResponse.json(
         { error: 'Subject and topic are required' },
         { status: 400 }
@@ -241,10 +190,18 @@ export async function POST(request: NextRequest) {
       }
       
       // Generate new lesson
+      console.log('[Coaching API] Generating new lesson...')
       const lesson: TextbookLesson = await AICoach.generateTextbookLesson(subject, topic, wizardData)
+      console.log('[Coaching API] Lesson generated successfully:', {
+        contentLength: lesson.content.length,
+        model: lesson.model,
+        isFallback: lesson.isFallback
+      })
       
       // Persist cache before returning so review mode is reliable and inference is not wasted
+      console.log('[Coaching API] Caching lesson...')
       await cacheLesson(lesson, scope, wizardData)
+      console.log('[Coaching API] Lesson cached successfully')
       
       return NextResponse.json({
         // New textbook format
@@ -261,11 +218,19 @@ export async function POST(request: NextRequest) {
         practice_tips: [],
         pacing_notes: ''
       })
+    }[Coaching API] Error:', error)
+    // Log more detailed error information
+    if (error instanceof Error) {
+      console.error('[Coaching API] Error message:', error.message)
+      console.error('[Coaching API] Error stack:', error.stack)
     }
-
-    // Legacy format (for backward compatibility)
-    const { subject: subj, topic: top, userLevel = 'intermediate' } = await request.json()
-    const coaching = await AICoach.generateFundamentalCoaching(subj, top, userLevel)
+    return NextResponse.json(
+      { 
+        error: 'Failed to generate coaching content',
+        details: error instanceof Error ? error.message : 'Unknown error'
+     
+    // Reuse already-parsed variables from the first request.json() call
+    const coaching = await AICoach.generateFundamentalCoaching(subject, topic, 'intermediate')
     return NextResponse.json(coaching)
     
   } catch (error) {

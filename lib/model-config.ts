@@ -8,13 +8,14 @@
 
 export const MODELS = {
   // Primary model for deep lesson content and diagnostics
-  LESSON: 'anthropic/claude-sonnet-4',
+  // Using Claude 3.5 Sonnet (latest stable version)
+  LESSON: 'anthropic/claude-3.5-sonnet',
   
   // Cheaper model for utility tasks (study guides, key points, checkpoints)
-  UTILITY: 'anthropic/claude-3.5-haiku',
+  UTILITY: 'anthropic/claude-3-haiku',
   
   // Free fallback when paid credits are exhausted
-  FREE_FALLBACK: 'openrouter/quasar-alpha',
+  FREE_FALLBACK: 'meta-llama/llama-3.1-8b-instruct:free',
   
   // Minimum credit threshold before switching to free (in dollars)
   CREDIT_THRESHOLD: 0.10

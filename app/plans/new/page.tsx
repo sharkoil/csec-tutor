@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, CheckCircle, Sparkles, ArrowRight, MessageSquare, FileText, GraduationCap, Target, Clock, Calendar, BarChart3, AlertTriangle, BookOpen } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { savePlan } from '@/lib/plan-storage'
 import { CSEC_SUBJECTS, TOPIC_PREREQUISITES, TOPIC_SUBTOPICS, getPrerequisites, getSubtopics } from '@/data/subjects'
 import { FileUpload } from '@/components/file-upload'
 import { PlanAttachment, WizardData } from '@/types'
@@ -258,8 +258,6 @@ export default function NewPlanPage() {
 
     setIsCreating(true)
     try {
-      const isMockUser = user.id.startsWith('user_')
-
       const wizardData: WizardData = {
         target_grade: targetGrade,
         proficiency_level: proficiencyLevel,
@@ -283,64 +281,12 @@ export default function NewPlanPage() {
         updated_at: new Date().toISOString()
       }
 
-      if (isMockUser) {
-        const mockPlanId = 'plan_' + Math.random().toString(36).substr(2, 9)
-        const mockPlan = { id: mockPlanId, ...planData }
-        const existingPlans = JSON.parse(localStorage.getItem('csec_mock_plans') || '[]')
-        existingPlans.push(mockPlan)
-        localStorage.setItem('csec_mock_plans', JSON.stringify(existingPlans))
-        router.push(`/plans/${mockPlanId}`)
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('study_plans')
-        .insert(planData)
-        .select()
-        .single()
-
-      if (error) throw error
-
-      const progressEntries = selectedTopics.map(topic => ({
-        user_id: user.id,
-        plan_id: data.id,
-        topic,
-        coaching_completed: false,
-        practice_completed: false,
-        exam_completed: false
-      }))
-
-      await supabase.from('progress').insert(progressEntries)
-      router.push(`/plans/${data.id}`)
+      // savePlan tries Supabase first, falls back to localStorage on failure
+      const saved = await savePlan(planData)
+      router.push(`/plans/${saved.id}`)
     } catch (error) {
       console.error('Error creating study plan:', error)
-
-      // Fallback to localStorage
-      const mockPlanId = 'plan_' + Math.random().toString(36).substr(2, 9)
-      const mockPlan = {
-        id: mockPlanId,
-        user_id: user.id,
-        subject: currentSubject?.name || selectedSubject,
-        topics: selectedTopics,
-        status: 'active',
-        description,
-        help_areas: helpAreas,
-        attachments,
-        wizard_data: {
-          target_grade: targetGrade,
-          proficiency_level: proficiencyLevel,
-          topic_confidence: topicConfidence,
-          exam_timeline: examTimeline,
-          study_minutes_per_session: studyMinutes,
-          study_days_per_week: studyDays,
-          learning_style: learningStyle,
-        },
-        created_at: new Date().toISOString()
-      }
-      const existingPlans = JSON.parse(localStorage.getItem('csec_mock_plans') || '[]')
-      existingPlans.push(mockPlan)
-      localStorage.setItem('csec_mock_plans', JSON.stringify(existingPlans))
-      router.push(`/plans/${mockPlanId}`)
+      setError('Failed to create study plan. Please try again.')
     } finally {
       setIsCreating(false)
     }
