@@ -68,6 +68,7 @@ async function hasSufficientCredits(): Promise<boolean> {
   
   // Use cached value if still valid
   if (cachedCredits && (now - cachedCredits.checkedAt) < CACHE_TTL_MS) {
+    console.log('[hasSufficientCredits] Using cached value:', cachedCredits.remaining, 'remaining')
     return cachedCredits.remaining >= MODELS.CREDIT_THRESHOLD
   }
   
@@ -79,10 +80,12 @@ async function hasSufficientCredits(): Promise<boolean> {
       remaining: credits.remaining,
       checkedAt: now
     }
+    console.log('[hasSufficientCredits] Fresh check - remaining:', credits.remaining, 'threshold:', MODELS.CREDIT_THRESHOLD)
     return credits.remaining >= MODELS.CREDIT_THRESHOLD
   }
   
   // If we can't check credits, assume we have them (fail open)
+  console.warn('[hasSufficientCredits] Could not fetch credits, assuming we have them')
   return true
 }
 
@@ -94,17 +97,20 @@ export async function getModelForTask(tier: ModelTier): Promise<{ model: string;
   const hasCredits = await hasSufficientCredits()
   
   if (!hasCredits) {
-    console.warn('OpenRouter credits exhausted, using free fallback model')
+    console.warn('[getModelForTask] OpenRouter credits exhausted, using free fallback model')
     return { model: MODELS.FREE_FALLBACK, isFallback: true }
   }
   
   switch (tier) {
     case 'lesson':
     case 'analysis':
+      console.log('[getModelForTask] Selecting LESSON tier model:', MODELS.LESSON)
       return { model: MODELS.LESSON, isFallback: false }
     case 'utility':
+      console.log('[getModelForTask] Selecting UTILITY tier model:', MODELS.UTILITY)
       return { model: MODELS.UTILITY, isFallback: false }
     default:
+      console.log('[getModelForTask] Selecting default model:', MODELS.LESSON)
       return { model: MODELS.LESSON, isFallback: false }
   }
 }
@@ -117,20 +123,24 @@ export async function callWithFallback<T>(
   tier: ModelTier
 ): Promise<{ result: T; model: string; isFallback: boolean }> {
   const { model, isFallback } = await getModelForTask(tier)
+  console.log('[callWithFallback] Selected model for tier', tier, ':', model, 'isFallback:', isFallback)
   
   try {
     const result = await primaryCall(model)
+    console.log('[callWithFallback] Successfully got result with', model)
     return { result, model, isFallback }
   } catch (error: any) {
+    console.error('[callWithFallback] Error with', model, ':', error?.message)
     // Check if it's a payment/credit error
     if (error?.status === 402 || error?.message?.includes('402') || error?.message?.includes('insufficient')) {
-      console.warn('Payment required error, falling back to free model')
+      console.warn('[callWithFallback] Payment required error, falling back to free model:', MODELS.FREE_FALLBACK)
       
       // Invalidate cache
       cachedCredits = { remaining: 0, checkedAt: Date.now() }
       
       // Retry with free model
       const result = await primaryCall(MODELS.FREE_FALLBACK)
+      console.log('[callWithFallback] Successfully got result with fallback model:', MODELS.FREE_FALLBACK)
       return { result, model: MODELS.FREE_FALLBACK, isFallback: true }
     }
     

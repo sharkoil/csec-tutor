@@ -347,10 +347,12 @@ export class AICoach {
       
       const latencyMs = Date.now() - startTime
       console.log('[AICoach] API call completed:', { latencyMs, model, isFallback })
+      console.log('[AICoach] Response model from OpenRouter:', response.model)
 
       // Track usage
       const usageRecord = extractUsageFromResponse(response, 'textbook-lesson', model, subject, topic)
       usageRecord.latency_ms = latencyMs
+      console.log('[AICoach] Recording usage with model:', usageRecord.model)
       trackUsage(usageRecord)
 
       const content = response.choices[0].message.content || ''
