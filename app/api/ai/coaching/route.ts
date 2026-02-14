@@ -218,7 +218,9 @@ export async function POST(request: NextRequest) {
         practice_tips: [],
         pacing_notes: ''
       })
-    }[Coaching API] Error:', error)
+    }
+  } catch (error) {
+    console.error('[Coaching API] Error:', error)
     // Log more detailed error information
     if (error instanceof Error) {
       console.error('[Coaching API] Error message:', error.message)
@@ -228,15 +230,7 @@ export async function POST(request: NextRequest) {
       { 
         error: 'Failed to generate coaching content',
         details: error instanceof Error ? error.message : 'Unknown error'
-     
-    // Reuse already-parsed variables from the first request.json() call
-    const coaching = await AICoach.generateFundamentalCoaching(subject, topic, 'intermediate')
-    return NextResponse.json(coaching)
-    
-  } catch (error) {
-    console.error('Coaching API error:', error)
-    return NextResponse.json(
-      { error: 'Failed to generate coaching content' },
+      },
       { status: 500 }
     )
   }
