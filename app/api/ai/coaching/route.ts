@@ -112,7 +112,7 @@ async function cacheLesson(lesson: TextbookLesson, scope: CacheScope, wizardData
     }
   } catch (error) {
     console.error('Failed to cache lesson:', error)
-    throw error
+    // Don't throw - caching failure should not prevent returning the lesson
   }
 }
 

@@ -11,6 +11,7 @@ ALTER TABLE ai_usage DROP CONSTRAINT IF EXISTS ai_usage_user_id_fkey;
 ALTER TABLE study_plans ALTER COLUMN user_id TYPE TEXT;
 ALTER TABLE progress ALTER COLUMN user_id TYPE TEXT;
 ALTER TABLE ai_usage ALTER COLUMN user_id TYPE TEXT;
+ALTER TABLE lessons ALTER COLUMN user_id TYPE TEXT;
 
 -- Re-add foreign key constraints (optional - comment out if you want to allow any user_id)
 -- ALTER TABLE study_plans ADD CONSTRAINT study_plans_user_id_fkey 
