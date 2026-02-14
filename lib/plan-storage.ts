@@ -58,40 +58,27 @@ function isLocalStorageId(id: string): boolean {
 
 /**
  * Save a new study plan.
- * Tries Supabase INSERT first. On any failure, saves to localStorage.
- * Returns the saved plan (with its assigned ID).
+ * Uses server action with service role to bypass RLS restrictions,
+ * then falls back to localStorage if that fails.
  */
 export async function savePlan(
   planData: Omit<StudyPlan, 'id'>
 ): Promise<StudyPlan> {
-  // Try Supabase first
   try {
-    const { data, error } = await supabase
-      .from('study_plans')
-      .insert(planData)
-      .select()
-      .single()
-
-    if (error) throw error
-
-    // Also create progress entries in Supabase
-    const progressEntries = planData.topics.map(topic => ({
-      user_id: planData.user_id,
-      plan_id: data.id,
-      topic,
-      coaching_completed: false,
-      practice_completed: false,
-      exam_completed: false,
-    }))
-
-    await supabase.from('progress').insert(progressEntries)
-
-    return data as StudyPlan
+    // Dynamically import server action
+    const { savePlanAction } = await import('@/lib/plan-actions')
+    const result = await savePlanAction(planData)
+    
+    if (result) {
+      console.log('[plan-storage] Plan saved to Supabase:', result.id)
+      return result
+    }
   } catch (err) {
-    console.warn('Supabase savePlan failed, falling back to localStorage:', err)
+    console.warn('[plan-storage] Server action failed, falling back to localStorage:', err)
   }
 
   // Fallback: localStorage
+  console.log('[plan-storage] Using localStorage fallback')
   const localId = generateLocalId()
   const localPlan: StudyPlan = { id: localId, ...planData } as StudyPlan
   const existing = getLocalPlans()
@@ -102,57 +89,51 @@ export async function savePlan(
 
 /**
  * Fetch all study plans for a user.
- * Tries Supabase, merges with localStorage on failure.
+ * Uses server action first, falls back to localStorage.
  */
 export async function fetchPlans(userId: string): Promise<StudyPlan[]> {
-  // Try Supabase first
   try {
-    const { data, error } = await supabase
-      .from('study_plans')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-    if (data && data.length > 0) return data as StudyPlan[]
+    const { fetchPlansAction } = await import('@/lib/plan-actions')
+    const dbPlans = await fetchPlansAction(userId)
+    if (dbPlans.length > 0) {
+      console.log('[plan-storage] Loaded plans from Supabase:', dbPlans.length)
+      return dbPlans
+    }
   } catch (err) {
-    console.warn('Supabase fetchPlans failed, falling back to localStorage:', err)
+    console.warn('[plan-storage] Server action failed, using localStorage:', err)
   }
 
-  // Fallback: localStorage (return plans for this user OR all local plans)
+  // Fallback: localStorage
   const local = getLocalPlans()
-  return local.filter(p => p.user_id === userId || true) // show all local plans
+  console.log('[plan-storage] Loaded plans from localStorage:', local.length)
+  return local
 }
 
 /**
  * Fetch a single plan by ID.
- * Tries Supabase, falls back to localStorage. Returns null if not found.
+ * Uses server action, falls back to localStorage. Returns null if not found.
  */
 export async function fetchPlan(
   userId: string,
   planId: string
 ): Promise<StudyPlan | null> {
-  // If this is a localStorage ID (starts with "plan_"), skip Supabase entirely
-  // to avoid UUID validation errors
+  // If this is a localStorage ID (starts with "plan_"), skip server call
   if (isLocalStorageId(planId)) {
-    console.log(`[plan-storage] Detected localStorage ID: ${planId}, skipping Supabase`)
+    console.log('[plan-storage] Detected localStorage ID, using local storage only')
     const local = getLocalPlans()
     return local.find(p => p.id === planId) || null
   }
 
-  // Try Supabase first
+  // Try server action first
   try {
-    const { data, error } = await supabase
-      .from('study_plans')
-      .select('*')
-      .eq('id', planId)
-      .eq('user_id', userId)
-      .single()
-
-    if (error) throw error
-    if (data) return data as StudyPlan
+    const { fetchPlanAction } = await import('@/lib/plan-actions')
+    const plan = await fetchPlanAction(userId, planId)
+    if (plan) {
+      console.log('[plan-storage] Loaded plan from Supabase:', planId)
+      return plan
+    }
   } catch (err) {
-    console.warn('Supabase fetchPlan failed, falling back to localStorage:', err)
+    console.warn('[plan-storage] Server action failed, checking localStorage:', err)
   }
 
   // Fallback: localStorage
