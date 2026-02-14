@@ -1,18 +1,18 @@
 /**
  * Model Configuration with Tiered Selection and Free Fallback
  * 
- * Uses Claude Sonnet 4 for quality-critical tasks (lessons, diagnostics)
- * Uses Claude Haiku for utility tasks (study guides, checkpoints)
+ * Uses GPT-5.2 for quality-critical tasks (lessons, diagnostics)
+ * Uses GPT-3.5 Turbo for utility tasks (study guides, checkpoints)
  * Falls back to free model when credits are exhausted
  */
 
 export const MODELS = {
   // Primary model for deep lesson content and diagnostics
-  // Using Claude 3.5 Sonnet (latest stable version)
-  LESSON: 'anthropic/claude-3.5-sonnet',
+  // Using OpenAI GPT-5.2 (latest flagship model)
+  LESSON: 'openai/gpt-5.2',
   
   // Cheaper model for utility tasks (study guides, key points, checkpoints)
-  UTILITY: 'anthropic/claude-3-haiku',
+  UTILITY: 'openai/gpt-3.5-turbo',
   
   // Free fallback when paid credits are exhausted
   FREE_FALLBACK: 'meta-llama/llama-3.1-8b-instruct:free',
