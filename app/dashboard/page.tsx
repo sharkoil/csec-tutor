@@ -9,15 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Navbar } from '@/components/navbar'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Loader2, Plus, BookOpen, Play, Award, Zap, Clock, TrendingUp, ArrowRight, CheckCircle } from 'lucide-react'
+import { Loader2, Plus, BookOpen, Play, Award, Zap, Clock, TrendingUp, ArrowRight, CheckCircle, Flame, Target, BarChart3, AlertTriangle } from 'lucide-react'
 import { fetchPlans as fetchPlansFromStorage } from '@/lib/plan-storage'
-import { StudyPlan } from '@/types'
+import { StudyPlan, DashboardSummary, StudentStreak, StudentMetric } from '@/types'
 
 export default function Dashboard() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [streak, setStreak] = useState<StudentStreak | null>(null)
+  const [atRiskTopics, setAtRiskTopics] = useState<StudentMetric[]>([])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -28,12 +31,12 @@ export default function Dashboard() {
   useEffect(() => {
     if (user) {
       fetchStudyPlans()
+      fetchMetrics()
     }
   }, [user])
 
   const fetchStudyPlans = async () => {
     try {
-      // Unified fetch: tries Supabase first, falls back to localStorage
       const plans = await fetchPlansFromStorage(user!.id)
       setStudyPlans(plans)
     } catch (error) {
@@ -41,6 +44,26 @@ export default function Dashboard() {
       setStudyPlans([])
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const fetchMetrics = async () => {
+    try {
+      const [summaryRes, atRiskRes] = await Promise.all([
+        fetch(`/api/metrics?userId=${user!.id}&view=summary`),
+        fetch(`/api/metrics?userId=${user!.id}&view=at-risk`),
+      ])
+      if (summaryRes.ok) {
+        const data = await summaryRes.json()
+        setSummary(data.summary)
+        setStreak(data.streak)
+      }
+      if (atRiskRes.ok) {
+        const data = await atRiskRes.json()
+        setAtRiskTopics(data.topics ?? [])
+      }
+    } catch (err) {
+      console.error('Error fetching metrics:', err)
     }
   }
 
@@ -93,11 +116,14 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardDescription className="font-medium">Total Plans</CardDescription>
-                  <div className="text-3xl font-bold text-primary mt-1">{totalPlans}</div>
+                  <CardDescription className="font-medium">Streak</CardDescription>
+                  <div className="text-3xl font-bold text-primary mt-1">
+                    {streak?.current ?? 0}
+                    <span className="text-base font-normal text-muted-foreground ml-1">days</span>
+                  </div>
                 </div>
                 <div className="p-3 rounded-lg bg-primary/10">
-                  <BookOpen className="h-6 w-6 text-primary" />
+                  <Flame className="h-6 w-6 text-primary" />
                 </div>
               </div>
             </CardHeader>
@@ -107,11 +133,13 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardDescription className="font-medium">In Progress</CardDescription>
-                  <div className="text-3xl font-bold text-secondary mt-1">{activePlans}</div>
+                  <CardDescription className="font-medium">Lessons Done</CardDescription>
+                  <div className="text-3xl font-bold text-secondary mt-1">
+                    {summary?.total_lessons_done ?? 0}
+                  </div>
                 </div>
                 <div className="p-3 rounded-lg bg-secondary/10">
-                  <Play className="h-6 w-6 text-secondary" />
+                  <BookOpen className="h-6 w-6 text-secondary" />
                 </div>
               </div>
             </CardHeader>
@@ -121,11 +149,13 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardDescription className="font-medium">Completed</CardDescription>
-                  <div className="text-3xl font-bold text-accent mt-1">{completedPlans}</div>
+                  <CardDescription className="font-medium">Avg. Mastery</CardDescription>
+                  <div className="text-3xl font-bold text-accent mt-1">
+                    {summary?.avg_mastery ?? 0}%
+                  </div>
                 </div>
                 <div className="p-3 rounded-lg bg-accent/10">
-                  <CheckCircle className="h-6 w-6 text-accent" />
+                  <Target className="h-6 w-6 text-accent" />
                 </div>
               </div>
             </CardHeader>
@@ -135,18 +165,46 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardDescription className="font-medium">Topics Learned</CardDescription>
+                  <CardDescription className="font-medium">Study Time</CardDescription>
                   <div className="text-3xl font-bold text-foreground/70 mt-1">
-                    {studyPlans.reduce((sum, plan) => sum + (plan.topics?.length || 0), 0)}
+                    {summary?.total_study_minutes
+                      ? summary.total_study_minutes >= 60
+                        ? `${Math.round(summary.total_study_minutes / 60)}h`
+                        : `${summary.total_study_minutes}m`
+                      : '0m'}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-muted">
-                  <TrendingUp className="h-6 w-6 text-foreground/70" />
+                  <Clock className="h-6 w-6 text-foreground/70" />
                 </div>
               </div>
             </CardHeader>
           </Card>
         </div>
+
+        {/* At-Risk Topics Alert */}
+        {atRiskTopics.length > 0 && (
+          <Card className="border-amber-500/30 bg-amber-500/5 mb-8">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <CardTitle className="text-lg">Topics Needing Attention</CardTitle>
+              </div>
+              <CardDescription>
+                These topics are below your target level — focus extra time here
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {atRiskTopics.slice(0, 6).map((t) => (
+                  <Badge key={t.id} variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">
+                    {t.subject} — {t.topic} ({t.mastery_pct}%)
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Your Study Plans Section */}
         <div>
@@ -180,7 +238,7 @@ export default function Dashboard() {
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {studyPlans.map((plan) => {
-                const progress = Math.floor(Math.random() * 100)
+                const completionPct = summary?.avg_completion ?? 0
                 const statusConfig = {
                   active: { 
                     badge: 'success',
@@ -248,9 +306,9 @@ export default function Dashboard() {
                       <div className="mb-6">
                         <div className="flex justify-between items-center mb-2">
                           <p className="text-xs font-medium text-muted-foreground">Progress</p>
-                          <p className="text-xs font-semibold text-foreground">{progress}%</p>
+                          <p className="text-xs font-semibold text-foreground">{completionPct}%</p>
                         </div>
-                        <Progress value={progress} max={100} variant="default" size="md" />
+                        <Progress value={completionPct} max={100} variant="default" size="md" />
                       </div>
 
                       {/* Action */}
@@ -284,7 +342,7 @@ export default function Dashboard() {
                 Quick Review
               </Button>
               <Button variant="outline" className="w-full justify-start cursor-not-allowed opacity-50">
-                <TrendingUp className="h-4 w-4 mr-2" />
+                <BarChart3 className="h-4 w-4 mr-2" />
                 View Analytics
               </Button>
             </div>

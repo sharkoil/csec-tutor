@@ -158,3 +158,87 @@ export interface QuizResult {
   time_taken: number
   completed_at: string
 }
+
+// ── Metrics & Analytics ─────────────────────────────────────────────
+
+export type MasteryLevel = 'not_started' | 'beginner' | 'developing' | 'proficient' | 'mastered'
+
+export interface StudentMetric {
+  id: string
+  user_id: string
+  plan_id: string
+  subject: string
+  topic: string
+
+  // Completion
+  lessons_completed: number
+  lessons_total: number
+  completion_pct: number
+
+  // Performance
+  quiz_score_avg: number
+  quiz_attempts: number
+  best_quiz_score: number
+  problems_attempted: number
+  problems_correct: number
+
+  // Mastery
+  mastery_level: MasteryLevel
+  mastery_pct: number
+
+  // Engagement
+  total_time_minutes: number
+  lesson_retry_count: number
+  last_activity_at: string | null
+
+  // Trends
+  score_trend: number
+  predicted_grade: string | null
+
+  created_at: string
+  updated_at: string
+}
+
+export interface DailyActivity {
+  id: string
+  user_id: string
+  activity_date: string
+  lessons_completed: number
+  quizzes_taken: number
+  time_spent_minutes: number
+  subjects_studied: string[]
+  created_at: string
+}
+
+export interface DBQuizResult {
+  id: string
+  user_id: string
+  plan_id: string
+  subject: string
+  topic: string
+  score: number
+  total_questions: number
+  correct_answers: number
+  time_taken_seconds: number | null
+  questions: unknown[]
+  created_at: string
+}
+
+export interface DashboardSummary {
+  user_id: string
+  subjects_count: number
+  topics_count: number
+  avg_completion: number
+  avg_mastery: number
+  avg_quiz_score: number
+  total_study_minutes: number
+  total_lessons_done: number
+  last_active: string | null
+  days_active_30d: number
+}
+
+export interface StudentStreak {
+  current: number
+  longest: number
+  today_active: boolean
+}

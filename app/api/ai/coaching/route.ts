@@ -9,6 +9,7 @@ import {
   parseCachedContent,
   shouldUseCachedLesson,
 } from '@/lib/lesson-cache'
+import { recordLessonComplete } from '@/lib/metrics'
 
 /**
  * Coaching API Route - Generates deep textbook-quality lessons
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { subject, topic, format = 'textbook', refresh = false, cacheOnly = false, wizardData, userId } = await request.json()
+    const { subject, topic, format = 'textbook', refresh = false, cacheOnly = false, wizardData, userId, planId } = await request.json()
 
     console.log('[Coaching API] Request:', { subject, topic, format, refresh, cacheOnly, hasWizardData: !!wizardData, userId })
 
@@ -202,6 +203,18 @@ export async function POST(request: NextRequest) {
       console.log('[Coaching API] Caching lesson...')
       await cacheLesson(lesson, scope, wizardData)
       console.log('[Coaching API] Lesson cached successfully')
+
+      // Record metrics (fire-and-forget)
+      if (userId) {
+        recordLessonComplete({
+          userId,
+          planId: planId || '',
+          subject,
+          topic,
+          timeSpentMinutes: Math.round((lesson.content.length / 1500)), // rough estimate based on content length
+          isRetry: refresh,
+        }).catch(err => console.error('[Coaching API] Metrics recording failed:', err))
+      }
       
       return NextResponse.json({
         // New textbook format

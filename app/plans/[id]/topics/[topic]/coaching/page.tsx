@@ -929,6 +929,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
           topic,
           userLevel: 'intermediate',
           userId: user?.id,
+          planId: plan.id,
           wizardData: plan.wizard_data || undefined
         })
       })
