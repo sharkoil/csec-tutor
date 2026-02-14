@@ -47,6 +47,13 @@ function generateLocalId(): string {
   return 'plan_' + Math.random().toString(36).substr(2, 9)
 }
 
+/**
+ * Check if an ID is a localStorage-generated ID (not a UUID)
+ */
+function isLocalStorageId(id: string): boolean {
+  return id.startsWith('plan_') || id.startsWith('user_')
+}
+
 // ── Public API ──────────────────────────────────────────────────────────
 
 /**
@@ -125,6 +132,14 @@ export async function fetchPlan(
   userId: string,
   planId: string
 ): Promise<StudyPlan | null> {
+  // If this is a localStorage ID (starts with "plan_"), skip Supabase entirely
+  // to avoid UUID validation errors
+  if (isLocalStorageId(planId)) {
+    console.log(`[plan-storage] Detected localStorage ID: ${planId}, skipping Supabase`)
+    const local = getLocalPlans()
+    return local.find(p => p.id === planId) || null
+  }
+
   // Try Supabase first
   try {
     const { data, error } = await supabase
@@ -154,6 +169,28 @@ export async function fetchProgress(
   planId: string,
   topics: string[]
 ): Promise<Progress[]> {
+  // If this is a localStorage plan ID, skip Supabase
+  if (isLocalStorageId(planId)) {
+    const progressMap = getLocalProgressMap()
+    return topics.map(topic => {
+      const key = progressKey(planId, topic)
+      const saved = progressMap[key]
+      return {
+        id: `progress_${topic}`,
+        user_id: userId,
+        plan_id: planId,
+        topic,
+        coaching_completed: saved?.coaching_completed || false,
+        practice_completed: saved?.practice_completed || false,
+        exam_completed: saved?.exam_completed || false,
+        practice_score: saved?.practice_score,
+        exam_score: saved?.exam_score,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as Progress
+    })
+  }
+
   // Try Supabase first
   try {
     const { data, error } = await supabase
@@ -198,6 +235,17 @@ export async function fetchTopicProgress(
   planId: string,
   topic: string
 ): Promise<Partial<Progress>> {
+  // If this is a localStorage plan ID, skip Supabase to avoid UUID errors
+  if (isLocalStorageId(planId)) {
+    const progressMap = getLocalProgressMap()
+    const key = progressKey(planId, topic)
+    return progressMap[key] || {
+      coaching_completed: false,
+      practice_completed: false,
+      exam_completed: false,
+    }
+  }
+
   // Try Supabase
   try {
     const { data, error } = await supabase
@@ -234,6 +282,18 @@ export async function saveProgress(
   topic: string,
   update: Partial<Progress>
 ): Promise<void> {
+  // If this is a localStorage plan ID, save directly to localStorage
+  if (isLocalStorageId(planId)) {
+    const progressMap = getLocalProgressMap()
+    const key = progressKey(planId, topic)
+    progressMap[key] = {
+      ...(progressMap[key] || {}),
+      ...update,
+    }
+    setLocalProgressMap(progressMap)
+    return
+  }
+
   // Try Supabase
   try {
     const { error } = await supabase
