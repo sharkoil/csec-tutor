@@ -264,29 +264,37 @@
 
   /* Prose-level spacing for lesson content */
   .prose-lesson {
-    font-size: 0.95rem;
-    line-height: 1.75;
+    font-size: 1.125rem;
+    line-height: 1.7;
     letter-spacing: 0.01em;
   }
 
+  @media (max-width: 768px) {
+    .prose-lesson {
+      font-size: 1rem;
+    }
+  }
+
   .prose-lesson h2 {
-    @apply text-2xl font-bold mt-10 mb-4 pb-2 border-b border-gray-200 text-gray-900;
+    @apply text-[28px] font-extrabold mt-14 mb-6 pb-3 border-b-2 border-gray-200 text-gray-900;
   }
 
   .prose-lesson h3 {
-    @apply text-xl font-bold mt-8 mb-4 text-gray-900;
+    @apply text-[22px] font-bold mt-10 mb-5 text-gray-900;
   }
 
   .prose-lesson h4 {
-    @apply text-lg font-semibold mt-6 mb-3 text-gray-800;
+    @apply text-[19px] font-semibold mt-8 mb-4 text-gray-800;
   }
 
   .prose-lesson p {
-    @apply mb-4 text-gray-700 leading-relaxed;
+    @apply mb-5 text-gray-700 leading-relaxed;
+    max-width: 70ch;
   }
 
   .prose-lesson ul, .prose-lesson ol {
-    @apply my-4 space-y-2;
+    @apply my-5 space-y-3;
+    max-width: 70ch;
   }
 
   .prose-lesson li {

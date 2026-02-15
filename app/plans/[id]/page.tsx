@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, BookOpen, Play, Award, CheckCircle } from 'lucide-react'
+import { Loader2, ArrowLeft, BookOpen, Play, Award, CheckCircle, Sparkles } from 'lucide-react'
 import { fetchPlan as fetchPlanFromStorage, fetchProgress as fetchProgressFromStorage } from '@/lib/plan-storage'
 import { StudyPlan, Progress } from '@/types'
 
@@ -184,7 +184,10 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
                         </Link>
                       ) : (
                         <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/coaching`}>
-                          <Button size="sm" variant="outline">Start</Button>
+                          <Button size="sm">
+                            <Sparkles className="h-4 w-4 mr-1.5" />
+                            Generate Lesson
+                          </Button>
                         </Link>
                       )}
                     </div>

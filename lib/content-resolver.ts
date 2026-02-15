@@ -302,11 +302,25 @@ export class ContentResolver {
     if (!supabase) return
     
     try {
+      // Delete-then-insert is more reliable than upsert with partial unique indexes
+      let deleteQuery = supabase
+        .from('lessons')
+        .delete()
+        .eq('subject', lesson.subject)
+        .eq('topic', lesson.topic)
+        .eq('content_type', lesson.content_type)
+
+      if (lesson.content_type === 'personalized' && lesson.user_id) {
+        deleteQuery = deleteQuery.eq('user_id', lesson.user_id)
+      } else {
+        deleteQuery = deleteQuery.is('user_id', null)
+      }
+
+      await deleteQuery
+
       await supabase
         .from('lessons')
-        .upsert(lesson, {
-          onConflict: 'subject,topic,content_type,user_id'
-        })
+        .insert(lesson)
     } catch (error) {
       console.error('[ContentResolver] Failed to store lesson:', error)
     }
@@ -382,13 +396,28 @@ export class ContentResolver {
     if (!supabase) return
     
     try {
+      // Delete-then-insert is more reliable than upsert with partial unique indexes
+      let deleteQuery = supabase
+        .from('practice_questions')
+        .delete()
+        .eq('subject', practice.subject)
+        .eq('topic', practice.topic)
+        .eq('difficulty', practice.difficulty)
+        .eq('content_type', practice.content_type)
+
+      if (practice.content_type === 'personalized' && practice.user_id) {
+        deleteQuery = deleteQuery.eq('user_id', practice.user_id)
+      } else {
+        deleteQuery = deleteQuery.is('user_id', null)
+      }
+
+      await deleteQuery
+
       await supabase
         .from('practice_questions')
-        .upsert({
+        .insert({
           ...practice,
           question_count: practice.questions.length
-        }, {
-          onConflict: 'subject,topic,difficulty,content_type,user_id'
         })
     } catch (error) {
       console.error('[ContentResolver] Failed to store practice:', error)

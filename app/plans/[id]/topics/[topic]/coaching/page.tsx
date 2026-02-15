@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useRef, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
@@ -639,16 +639,16 @@ function renderMarkdown(markdown: string): React.ReactNode {
     // Headers
     if (line.startsWith('#### ')) {
       flushList()
-      elements.push(<h4 key={i} className="text-lg font-bold text-gray-900 mt-6 mb-3">{formatInline(line.slice(5))}</h4>)
+      elements.push(<h4 key={i} className="text-[19px] font-semibold text-gray-900 mt-8 mb-4">{formatInline(line.slice(5))}</h4>)
     } else if (line.startsWith('### ')) {
       flushList()
-      elements.push(<h3 key={i} className="text-xl font-bold text-gray-900 mt-8 mb-4">{formatInline(line.slice(4))}</h3>)
+      elements.push(<h3 key={i} className="text-[22px] font-bold text-gray-900 mt-10 mb-5">{formatInline(line.slice(4))}</h3>)
     } else if (line.startsWith('## ')) {
       flushList()
-      elements.push(<h2 key={i} className="text-2xl font-bold text-gray-900 mt-10 mb-4 pb-2 border-b border-gray-200">{formatInline(line.slice(3))}</h2>)
+      elements.push(<h2 key={i} className="text-[28px] font-extrabold text-gray-900 mt-14 mb-6 pb-3 border-b-2 border-gray-200">{formatInline(line.slice(3))}</h2>)
     } else if (line.startsWith('# ')) {
       flushList()
-      elements.push(<h1 key={i} className="text-3xl font-bold text-gray-900 mt-6 mb-6">{formatInline(line.slice(2))}</h1>)
+      elements.push(<h1 key={i} className="text-4xl font-extrabold text-gray-900 mt-8 mb-8">{formatInline(line.slice(2))}</h1>)
     }
     // Unordered list
     else if (line.match(/^[-*]\s+/)) {
@@ -694,7 +694,7 @@ function renderMarkdown(markdown: string): React.ReactNode {
     // Regular paragraph
     else {
       flushList()
-      elements.push(<p key={i} className="text-gray-700 leading-relaxed mb-4">{formatInline(line)}</p>)
+      elements.push(<p key={i} className="text-gray-700 leading-relaxed mb-5 max-w-[70ch]">{formatInline(line)}</p>)
     }
   }
   
@@ -723,7 +723,7 @@ function paginateContent(markdown: string): string[] {
     const wordCount = section.split(/\s+/).length
     const currentWordCount = currentPage.split(/\s+/).length
     
-    if (currentPage && currentWordCount + wordCount > 1000) {
+    if (currentPage && currentWordCount + wordCount > 500) {
       pages.push(currentPage.trim())
       currentPage = section
     } else {
@@ -736,7 +736,7 @@ function paginateContent(markdown: string): string[] {
   }
   
   // If we only have 1 page but it's very long, split by ### headers
-  if (pages.length === 1 && pages[0].split(/\s+/).length > 1200) {
+  if (pages.length === 1 && pages[0].split(/\s+/).length > 600) {
     const subSections = pages[0].split(/(?=^### )/gm)
     const subPages: string[] = []
     let subCurrentPage = ''
@@ -745,7 +745,7 @@ function paginateContent(markdown: string): string[] {
       const wordCount = sub.split(/\s+/).length
       const currentWordCount = subCurrentPage.split(/\s+/).length
       
-      if (subCurrentPage && currentWordCount + wordCount > 800) {
+      if (subCurrentPage && currentWordCount + wordCount > 400) {
         subPages.push(subCurrentPage.trim())
         subCurrentPage = sub
       } else {
@@ -788,12 +788,23 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
   const [expandedExamples, setExpandedExamples] = useState<Set<number>>(new Set([0])) // First example expanded by default
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
+  const lessonTopRef = useRef<HTMLDivElement>(null)
   const [isReviewMode, setIsReviewMode] = useState(false)
   const [isLoadingReview, setIsLoadingReview] = useState(false)
   const [reviewError, setReviewError] = useState(false)
   const [generationError, setGenerationError] = useState<string | null>(null)
+  const [autoGenerate, setAutoGenerate] = useState(false)
   const topic = decodeURIComponent(encodedTopic)
   
+  // Scroll to top of lesson when page changes
+  useEffect(() => {
+    if (lessonTopRef.current) {
+      lessonTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [currentPage])
+
   // Cycle through loading messages every 3 seconds
   useEffect(() => {
     if (!isGenerating) return
@@ -850,6 +861,14 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
     }
   }, [user, planId])
 
+  // Auto-generate lesson on first visit (skips the useless "Ready to Learn?" step)
+  useEffect(() => {
+    if (autoGenerate && plan && !coaching && !isGenerating && !isReviewMode) {
+      setAutoGenerate(false)
+      generateCoaching()
+    }
+  }, [autoGenerate, plan, coaching, isGenerating, isReviewMode])
+
   const fetchPlan = async () => {
     try {
       // Unified fetch: tries Supabase first, falls back to localStorage
@@ -872,6 +891,10 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
       if (progress?.coaching_completed) {
         setIsReviewMode(true)
         loadCachedLesson(planData.subject, planData.wizard_data)
+      } else {
+        // No lesson yet — start generating immediately instead of
+        // showing a pointless "Ready to Learn?" interstitial.
+        setAutoGenerate(true)
       }
     } catch (error) {
       console.error('Error fetching plan:', error)
@@ -998,7 +1021,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
         </div>
       </nav>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-4">
             <BookOpen className="h-8 w-8 text-blue-600" />
@@ -1071,21 +1094,21 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
           </Card>
         )}
 
+        {/* Fallback: manual generate button shown only if auto-generate didn't fire
+            (e.g. user navigated directly, or generation errored and was dismissed) */}
         {!coaching && !isGenerating && !isLoadingReview && !reviewError && !generationError && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Lightbulb className="h-6 w-6 text-yellow-500" />
-                <span>Ready to Learn?</span>
-              </CardTitle>
-              <CardDescription>
-                Our AI coach will create personalized learning content based on CSEC curriculum
-                and your learning style.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={generateCoaching} size="lg" className="w-full">
-                Generate Coaching Content
+          <Card className="overflow-hidden">
+            <CardContent className="text-center py-12">
+              <div className="relative mx-auto w-16 h-16 mb-6">
+                <div className="absolute inset-0 rounded-full bg-blue-100 animate-ping opacity-25"></div>
+                <div className="relative flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-500">
+                  <Loader2 className="h-8 w-8 animate-spin text-white" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Preparing your lesson...</h3>
+              <p className="text-gray-500 text-sm mb-6">Generation will begin momentarily for {topic}</p>
+              <Button onClick={generateCoaching} variant="outline" size="sm">
+                Start Now
               </Button>
             </CardContent>
           </Card>
@@ -1159,106 +1182,108 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               const showPagination = totalPages > 1
               
               return (
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center space-x-2">
-                          <BookOpen className="h-6 w-6 text-blue-600" />
-                          <span>Complete Lesson: {topic}</span>
-                        </CardTitle>
-                        <CardDescription className="flex items-center space-x-2 mt-1">
-                          <span>Comprehensive textbook-quality content for CSEC preparation</span>
-                          {coaching.model && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                              <Zap className="h-3 w-3 mr-1" />
-                              AI Generated
-                            </span>
-                          )}
-                        </CardDescription>
-                      </div>
-                      {showPagination && (
-                        <div className="flex items-center space-x-2 text-sm text-gray-500">
-                          <span className="font-medium">Part {currentPage} of {totalPages}</span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Progress bar for pagination */}
-                    {showPagination && (
-                      <div className="mt-4">
-                        <div className="flex space-x-1">
-                          {Array.from({ length: totalPages }, (_, i) => (
-                            <button
-                              key={i}
-                              onClick={() => setCurrentPage(i + 1)}
-                              className={`flex-1 h-2 rounded-full transition-all duration-300 ${
-                                i + 1 === currentPage 
-                                  ? 'bg-blue-600' 
-                                  : i + 1 < currentPage 
-                                    ? 'bg-green-500' 
-                                    : 'bg-gray-200 hover:bg-gray-300'
-                              }`}
-                              title={`Go to part ${i + 1}`}
-                            />
-                          ))}
-                        </div>
-                        <div className="flex justify-between mt-1 text-xs text-gray-500">
-                          <span>Start</span>
-                          <span>Finish</span>
-                        </div>
-                      </div>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="prose-lesson max-w-none">
-                      {renderMarkdown(pages[currentPage - 1] || '')}
-                    </div>
-                    
-                    {/* Pagination Navigation */}
-                    {showPagination && (
-                      <div className="flex items-center justify-between mt-8 pt-6 border-t">
-                        <Button
-                          variant="outline"
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          disabled={currentPage === 1}
-                          className="flex items-center space-x-2"
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                          <span>Previous</span>
-                        </Button>
-                        
-                        <div className="flex items-center space-x-4">
-                          <span className="text-sm text-gray-600">
-                            📖 Part {currentPage} of {totalPages}
+                <div ref={lessonTopRef}>
+                  {/* Lesson header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="flex items-center space-x-2 text-2xl font-bold text-gray-900">
+                        <BookOpen className="h-6 w-6 text-blue-600" />
+                        <span>Complete Lesson: {topic}</span>
+                      </h2>
+                      <p className="flex items-center space-x-2 mt-1 text-sm text-gray-500">
+                        <span>Comprehensive textbook-quality content for CSEC preparation</span>
+                        {coaching.model && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                            <Zap className="h-3 w-3 mr-1" />
+                            AI Generated
                           </span>
-                        </div>
-                        
-                        <Button
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          disabled={currentPage === totalPages}
-                          className="flex items-center space-x-2"
-                        >
-                          <span>{currentPage === totalPages ? 'Done!' : 'Next'}</span>
-                          {currentPage !== totalPages && <ChevronRight className="h-4 w-4" />}
-                        </Button>
+                        )}
+                      </p>
+                    </div>
+                    {showPagination && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-500">
+                        <span className="font-medium">Part {currentPage} of {totalPages}</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Sticky progress bar */}
+                  {showPagination && (
+                    <div className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm pb-3 pt-2 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+                      <div className="flex space-x-1">
+                        {Array.from({ length: totalPages }, (_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setCurrentPage(i + 1)}
+                            className={`flex-1 h-2 rounded-full transition-all duration-300 ${
+                              i + 1 === currentPage 
+                                ? 'bg-blue-600' 
+                                : i + 1 < currentPage 
+                                  ? 'bg-green-500' 
+                                  : 'bg-gray-200 hover:bg-gray-300'
+                            }`}
+                            title={`Go to part ${i + 1}`}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex justify-between mt-1 text-xs text-gray-500">
+                        <span>Start</span>
+                        <span>Part {currentPage} of {totalPages}</span>
+                        <span>Finish</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lesson content — no Card wrapper, full width */}
+                  <div className="prose-lesson max-w-none mt-6">
+                    {renderMarkdown(pages[currentPage - 1] || '')}
+                  </div>
                     
-                    {/* Encouraging message when on last page */}
-                    {showPagination && currentPage === totalPages && (
-                      <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200 text-center">
-                        <span className="text-2xl">🎉</span>
-                        <p className="text-green-800 font-medium mt-2">
-                          Great job! You've read through the entire lesson!
-                        </p>
-                        <p className="text-green-600 text-sm mt-1">
-                          Scroll down to mark this coaching complete and move to practice questions.
-                        </p>
+                  {/* Pagination Navigation */}
+                  {showPagination && (
+                    <div className="flex items-center justify-between mt-10 pt-6 border-t border-gray-200">
+                      <Button
+                        variant="outline"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        size="lg"
+                        className="flex items-center space-x-2"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span>Previous</span>
+                      </Button>
+                      
+                      <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600">
+                          📖 Part {currentPage} of {totalPages}
+                        </span>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      
+                      <Button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        size="lg"
+                        className="flex items-center space-x-2"
+                      >
+                        <span>{currentPage === totalPages ? 'Done!' : 'Next'}</span>
+                        {currentPage !== totalPages && <ChevronRight className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* Encouraging message when on last page */}
+                  {showPagination && currentPage === totalPages && (
+                    <div className="mt-8 p-5 bg-green-50 rounded-xl border border-green-200 text-center">
+                      <span className="text-3xl">🎉</span>
+                      <p className="text-green-800 font-semibold text-lg mt-2">
+                        Great job! You've read through the entire lesson!
+                      </p>
+                      <p className="text-green-600 text-sm mt-1">
+                        Scroll down to mark this coaching complete and move to practice questions.
+                      </p>
+                    </div>
+                  )}
+                </div>
               )
             })()}
 

@@ -48,7 +48,10 @@ function generateLocalId(): string {
 }
 
 /**
- * Check if an ID is a localStorage-generated ID (not a UUID)
+ * Check if an ID is a localStorage-generated ID (not a Supabase UUID).
+ * localStorage plan IDs start with 'plan_'.
+ * Legacy user IDs started with 'user_' — these are now migrated to proper
+ * UUIDs by auth, but we still recognise them for backward compatibility.
  */
 function isLocalStorageId(id: string): boolean {
   return id.startsWith('plan_') || id.startsWith('user_')

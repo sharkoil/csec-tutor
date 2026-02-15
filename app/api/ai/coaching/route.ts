@@ -20,6 +20,11 @@ import { recordLessonComplete } from '@/lib/metrics'
  * Caches generated lessons in the `lessons` table to avoid regenerating.
  */
 
+/** Check whether a string is a valid UUID. */
+function isValidUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+}
+
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -145,9 +150,10 @@ export async function POST(request: NextRequest) {
 
     // Use the new textbook lesson generator (default)
     if (format === 'textbook') {
-      // User-scoped cache prevents stale generic lessons from overriding wizard-driven quality
-      const scope: CacheScope = userId
-        ? { contentType: 'personalized', userId }
+      // Only use personalized scope if user_id is a valid UUID (can be stored in DB)
+      const validUserId = userId && isValidUUID(userId) ? userId : null
+      const scope: CacheScope = validUserId
+        ? { contentType: 'personalized', userId: validUserId }
         : { contentType: 'common', userId: null }
 
       // Check cache first (unless refresh requested)

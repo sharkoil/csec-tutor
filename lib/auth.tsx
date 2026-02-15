@@ -14,6 +14,55 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+/** Check whether a string is a valid UUID (any version). */
+function isValidUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+}
+
+/**
+ * Migrate old localStorage mock users that have non-UUID IDs.
+ * This runs once on boot — existing plans in localStorage are also patched.
+ */
+function migrateOldMockUser(): void {
+  try {
+    const mockUserStr = localStorage.getItem('csec_mock_user')
+    if (!mockUserStr) return
+
+    const mockUser = JSON.parse(mockUserStr)
+    if (!mockUser.id || isValidUUID(mockUser.id)) return // already good
+
+    const oldId = mockUser.id
+    const newId = crypto.randomUUID()
+    console.log(`[auth] Migrating mock user ID from ${oldId} to ${newId}`)
+    mockUser.id = newId
+    localStorage.setItem('csec_mock_user', JSON.stringify(mockUser))
+
+    // Patch locally-stored plans so they reference the new user_id
+    const plansStr = localStorage.getItem('csec_mock_plans')
+    if (plansStr) {
+      try {
+        const plans = JSON.parse(plansStr)
+        for (const plan of plans) {
+          if (plan.user_id === oldId) plan.user_id = newId
+        }
+        localStorage.setItem('csec_mock_plans', JSON.stringify(plans))
+      } catch { /* ignore corrupt data */ }
+    }
+
+    // Patch locally-stored progress
+    const progressStr = localStorage.getItem('csec_mock_progress')
+    if (progressStr) {
+      try {
+        const progress = JSON.parse(progressStr)
+        // Progress keys are "planId_topic" — user_id isn't in the key, so no key migration needed
+        localStorage.setItem('csec_mock_progress', JSON.stringify(progress))
+      } catch { /* ignore corrupt data */ }
+    }
+  } catch {
+    // Migration is best-effort
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -24,6 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const getUser = async () => {
       try {
+        // Migrate old non-UUID mock user IDs before loading
+        migrateOldMockUser()
+
         // Check localStorage for dev/mock user
         const mockUserStr = localStorage.getItem('csec_mock_user')
         if (mockUserStr) {
@@ -108,9 +160,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthState(prev => ({ ...prev, loading: true, error: null }))
     
     try {
-      // Mock user creation for testing
+      // Mock user creation for testing — use a real UUID so Supabase storage works
       const mockUser = {
-        id: 'user_' + Math.random().toString(36).substr(2, 9),
+        id: crypto.randomUUID(),
         email,
         name,
       }
@@ -163,7 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // For development/testing: accept any valid email/password
       if (email && password && password.length >= 6) {
         const mockUser = {
-          id: 'user_' + Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
           email,
           name: email.split('@')[0],
         }
