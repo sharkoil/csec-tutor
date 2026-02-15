@@ -108,6 +108,42 @@ export const CSEC_SUBJECTS = {
       'Communication',
       'Entrepreneurship'
     ]
+  },
+  geography: {
+    name: 'Geography',
+    code: 'GEO',
+    description: 'Study of the Earth\'s physical features, climate, populations, and human-environment interactions with a Caribbean focus.',
+    topics: [
+      'Map Reading and Interpretation',
+      'Natural Hazards and Events',
+      'Weather and Climate',
+      'Hydrosphere',
+      'Lithosphere',
+      'Population',
+      'Settlement',
+      'Transportation',
+      'Agriculture and Food Production',
+      'Manufacturing and Industrial Development',
+      'Tourism',
+      'Environmental Management'
+    ]
+  },
+  social_studies: {
+    name: 'Social Studies',
+    code: 'SOC',
+    description: 'Exploration of Caribbean society, governance, economics, and social issues affecting the region.',
+    topics: [
+      'Individual, Family and Society',
+      'Culture and Identity',
+      'Social Issues',
+      'Governance',
+      'Rights and Responsibilities',
+      'Regional and International Integration',
+      'Economic Activities and Development',
+      'Population and Resources',
+      'Environmental Sustainability',
+      'Communication and Technology'
+    ]
   }
 }
 
@@ -195,6 +231,26 @@ export const TOPIC_PREREQUISITES: Record<string, Record<string, string[]>> = {
     'Electronics': ['Electricity and Magnetism'],
     'Atomic Physics': ['Electricity and Magnetism'],
   },
+  geography: {
+    'Natural Hazards and Events': ['Lithosphere', 'Weather and Climate'],
+    'Weather and Climate': ['Map Reading and Interpretation'],
+    'Hydrosphere': ['Weather and Climate'],
+    'Settlement': ['Population'],
+    'Transportation': ['Settlement'],
+    'Agriculture and Food Production': ['Weather and Climate', 'Lithosphere'],
+    'Manufacturing and Industrial Development': ['Agriculture and Food Production'],
+    'Tourism': ['Transportation', 'Environmental Management'],
+    'Environmental Management': ['Hydrosphere', 'Lithosphere', 'Population'],
+  },
+  social_studies: {
+    'Culture and Identity': ['Individual, Family and Society'],
+    'Social Issues': ['Individual, Family and Society', 'Culture and Identity'],
+    'Rights and Responsibilities': ['Governance'],
+    'Regional and International Integration': ['Governance', 'Economic Activities and Development'],
+    'Economic Activities and Development': ['Population and Resources'],
+    'Environmental Sustainability': ['Population and Resources', 'Economic Activities and Development'],
+    'Communication and Technology': ['Social Issues'],
+  },
 }
 
 /**
@@ -232,6 +288,21 @@ export const TOPIC_SUBTOPICS: Record<string, Record<string, string[]>> = {
     'Mechanics': ['Speed, Velocity & Acceleration', 'Distance-Time & Velocity-Time Graphs', 'Equations of Motion'],
     'Forces': ['Types of Forces', "Newton's Laws", 'Friction & Air Resistance', 'Moments & Equilibrium'],
     'Electricity and Magnetism': ['Current, Voltage & Resistance', 'Series & Parallel Circuits', "Ohm's Law & Calculations", 'Magnetism & Electromagnetic Induction'],
+  },
+  geography: {
+    'Map Reading and Interpretation': ['Scale, Distance & Direction', 'Contour Lines & Relief', 'Grid References & Symbols', 'Cross-Sections & Sketch Maps'],
+    'Weather and Climate': ['Elements of Weather', 'Factors Affecting Climate', 'Weather Instruments & Recording', 'Caribbean Climate Zones'],
+    'Lithosphere': ['Rock Types & Rock Cycle', 'Plate Tectonics & Volcanoes', 'Weathering & Erosion', 'Soil Formation & Types'],
+    'Hydrosphere': ['The Water Cycle', 'River Features & Processes', 'Coastal Features & Processes', 'Water Resources & Management'],
+    'Population': ['Population Distribution & Density', 'Population Growth & Change', 'Migration', 'Population Pyramids & Data'],
+    'Environmental Management': ['Causes of Environmental Degradation', 'Conservation Strategies', 'Sustainable Development', 'Natural Disaster Preparedness'],
+  },
+  social_studies: {
+    'Individual, Family and Society': ['Types of Families', 'Socialisation & Social Institutions', 'Role of Education'],
+    'Culture and Identity': ['Caribbean Cultural Diversity', 'Cultural Retention & Change', 'National Identity & Symbols'],
+    'Social Issues': ['Poverty & Inequality', 'Crime & Violence', 'Health Issues & HIV/AIDS', 'Substance Abuse'],
+    'Governance': ['Systems of Government', 'The Constitution & Rule of Law', 'Elections & Political Participation', 'Regional Governance (CARICOM)'],
+    'Economic Activities and Development': ['Economic Systems', 'Sectors of the Economy', 'Trade & Caribbean Economies', 'Development Indicators'],
   },
 }
 
