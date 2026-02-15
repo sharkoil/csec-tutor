@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, CheckCircle, Sparkles, ArrowRight, MessageSquare, FileText, GraduationCap, Target, Clock, Calendar, BarChart3, AlertTriangle, BookOpen } from 'lucide-react'
+import { Loader2, ArrowLeft, CheckCircle, Sparkles, ArrowRight, MessageSquare, FileText, GraduationCap, Target, Clock, Calendar, BarChart3, AlertTriangle, BookOpen, Info } from 'lucide-react'
 import { savePlan } from '@/lib/plan-storage'
 import { CSEC_SUBJECTS, TOPIC_PREREQUISITES, TOPIC_SUBTOPICS, getPrerequisites, getSubtopics } from '@/data/subjects'
 import { FileUpload } from '@/components/file-upload'
@@ -62,6 +62,31 @@ const LEVEL_OPTIONS = [
   { value: 'intermediate' as const, label: 'I know the basics', desc: 'Some knowledge — need structured practice and deeper understanding', icon: '📗' },
   { value: 'advanced' as const, label: 'Strong foundation', desc: 'Solid understanding — focused on exam technique and challenging problems', icon: '🚀' },
 ]
+
+/** Reusable info tooltip — hover to reveal, click to toggle on mobile */
+function InfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative inline-flex ml-1.5 align-middle">
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className="text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
+        aria-label="More info"
+      >
+        <Info className="h-4 w-4" />
+      </button>
+      {open && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 rounded-lg bg-gray-900 text-white text-xs leading-relaxed px-3 py-2 shadow-lg pointer-events-none">
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </span>
+      )}
+    </span>
+  )
+}
 
 const EXAM_OPTIONS = [
   { value: 'may_june' as ExamTimeline, label: 'May/June 2026', desc: 'Standard school sitting', color: 'border-red-400 bg-red-50' },
@@ -554,6 +579,7 @@ export default function NewPlanPage() {
                 <CardTitle className="flex items-center">
                   <Target className="h-5 w-5 mr-2 text-blue-600" />
                   What grade are you aiming for?
+                  <InfoTip text="Your target grade controls the depth and difficulty of your lessons. Grade I covers advanced exam techniques and harder problems, Grade II covers solid understanding with moderate practice, and Grade III focuses on core concepts to secure a pass." />
                 </CardTitle>
                 <CardDescription>This determines how deep each topic goes</CardDescription>
               </CardHeader>
@@ -584,6 +610,7 @@ export default function NewPlanPage() {
                 <CardTitle className="flex items-center">
                   <BarChart3 className="h-5 w-5 mr-2 text-indigo-600" />
                   How would you describe your overall level?
+                  <InfoTip text="This sets the starting point for your lessons. 'Starting from scratch' means lessons begin with fundamentals and build up. 'I know the basics' skips introductions and focuses on deepening understanding. 'Strong foundation' prioritises exam strategies, past paper practice, and challenging problems." />
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -617,6 +644,7 @@ export default function NewPlanPage() {
                 <CardTitle className="flex items-center">
                   <GraduationCap className="h-5 w-5 mr-2 text-purple-600" />
                   Rate your confidence in each topic
+                  <InfoTip text="Your per-topic confidence tells the AI where to spend the most time. Topics you mark as 'Haven't covered' or 'Struggling' get more detailed explanations and extra practice. Topics marked 'I've got this' get quicker recaps and focus on exam-level questions instead." />
                 </CardTitle>
                 <CardDescription>
                   Be honest — this helps target exactly where you need the most support
