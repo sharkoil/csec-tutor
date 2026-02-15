@@ -12,6 +12,7 @@ import { renderMathInText, containsMath } from '@/components/math-renderer'
 import LessonChat from '@/components/lesson-chat'
 import InteractiveMCQ from '@/components/interactive-mcq'
 import StudyTipsSlider from '@/components/study-tips-slider'
+import WrittenAnswerInput from '@/components/written-answer-input'
 
 // ─── Heading utilities ────────────────────────────────────────────────────────
 
@@ -267,7 +268,13 @@ function AnswerReveal({ children, label = 'Show Answer' }: { children: React.Rea
  * answer cards, worked examples, comparisons) and renders them as styled
  * interactive cards. Falls back to standard markdown for non-question content.
  */
-function renderMarkdown(markdown: string): React.ReactNode {
+/** Context passed through renderMarkdown for grading integration */
+interface RenderContext {
+  subject?: string
+  topic?: string
+}
+
+function renderMarkdown(markdown: string, ctx: RenderContext = {}): React.ReactNode {
   if (!markdown) return null
   
   const lines = markdown.split('\n')
@@ -539,9 +546,32 @@ function renderMarkdown(markdown: string): React.ReactNode {
     const revealLabel = type === 'practice-set' ? 'Show Answer Key' :
                         type === 'extended' ? 'Show Model Answer' : 'Show Answer'
 
+    // For shortanswer / extended types, inject a WrittenAnswerInput between question and answer reveal
+    const showWrittenInput = type === 'shortanswer' || type === 'extended'
+
+    // Extract plain text for grading context
+    const stripMarkdown = (line: string) =>
+      line.replace(/\*\*(.+?)\*\*/g, '$1').replace(/[✅📝📋💡🔑❌]/g, '').replace(/^[-*]\s+/, '').trim()
+    const questionText = questionLines.map(stripMarkdown).filter(Boolean).join('\n')
+    const modelAnswerText = answerLines.map(stripMarkdown).filter(Boolean).join('\n')
+
+    // Extract marks from question text (e.g. "[4 marks]" or "(5 marks)")
+    const marksMatch = questionText.match(/\[(\d+)\s*marks?\]|\((\d+)\s*marks?\)/i)
+    const marks = marksMatch ? parseInt(marksMatch[1] || marksMatch[2]) : (type === 'extended' ? 8 : 4)
+
     return (
       <>
         {renderCardLines(questionLines, type)}
+        {showWrittenInput && (
+          <WrittenAnswerInput
+            question={questionText}
+            modelAnswer={modelAnswerText}
+            marks={marks}
+            subject={ctx.subject}
+            topic={ctx.topic}
+            type={type as 'shortanswer' | 'extended'}
+          />
+        )}
         <AnswerReveal label={revealLabel}>
           {renderCardLines(answerLines, type)}
         </AnswerReveal>
@@ -1459,7 +1489,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
                   <div className="lg:grid lg:grid-cols-[1fr_260px] lg:gap-8 mt-6">
                     {/* Lesson content — no Card wrapper, full width */}
                     <div className="prose-lesson max-w-none min-w-0">
-                      {renderMarkdown(currentPageMarkdown)}
+                      {renderMarkdown(currentPageMarkdown, { subject: plan?.subject, topic })}
                     </div>
 
                     {/* Sidebar outline */}
