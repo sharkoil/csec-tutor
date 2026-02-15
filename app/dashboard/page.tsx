@@ -9,14 +9,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Navbar } from '@/components/navbar'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Loader2, Plus, BookOpen, Play, Award, Zap, Clock, TrendingUp, ArrowRight, CheckCircle, Flame, Target, BarChart3, AlertTriangle } from 'lucide-react'
-import { fetchPlans as fetchPlansFromStorage } from '@/lib/plan-storage'
-import { StudyPlan, DashboardSummary, StudentStreak, StudentMetric } from '@/types'
+import { Loader2, Plus, BookOpen, Play, Award, Zap, Clock, TrendingUp, ArrowRight, CheckCircle, Flame, Target, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
+import { fetchPlans as fetchPlansFromStorage, fetchProgress as fetchProgressFromStorage } from '@/lib/plan-storage'
+import { StudyPlan, Progress as ProgressData, DashboardSummary, StudentStreak, StudentMetric } from '@/types'
 
 export default function Dashboard() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([])
+  const [planProgress, setPlanProgress] = useState<Record<string, ProgressData[]>>({})
+  const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [streak, setStreak] = useState<StudentStreak | null>(null)
@@ -39,6 +41,22 @@ export default function Dashboard() {
     try {
       const plans = await fetchPlansFromStorage(user!.id)
       setStudyPlans(plans)
+      // Auto-expand all plans and fetch progress for each
+      const expanded: Record<string, boolean> = {}
+      const progressMap: Record<string, ProgressData[]> = {}
+      await Promise.all(
+        plans.map(async (plan) => {
+          expanded[plan.id] = true
+          try {
+            const prog = await fetchProgressFromStorage(user!.id, plan.id, plan.topics)
+            progressMap[plan.id] = prog
+          } catch {
+            progressMap[plan.id] = []
+          }
+        })
+      )
+      setExpandedPlans(expanded)
+      setPlanProgress(progressMap)
     } catch (error) {
       console.error('Error fetching study plans:', error)
       setStudyPlans([])
@@ -82,6 +100,45 @@ export default function Dashboard() {
   const totalPlans = studyPlans.length
   const activePlans = studyPlans.filter(plan => plan.status === 'active').length
   const completedPlans = studyPlans.filter(plan => plan.status === 'completed').length
+
+  const getTopicProgress = (planId: string, topic: string): ProgressData | null => {
+    const prog = planProgress[planId]
+    if (!prog) return null
+    return prog.find(p => p.topic === topic) || null
+  }
+
+  /** Return the best direct link for a topic based on its progress */
+  const getTopicLink = (planId: string, topic: string): string => {
+    const base = `/plans/${planId}/topics/${encodeURIComponent(topic)}`
+    const prog = getTopicProgress(planId, topic)
+    if (!prog) return `${base}/coaching`
+    if (prog.exam_completed) return `${base}/coaching` // completed — link to review
+    if (prog.practice_completed) return `${base}/exam`
+    if (prog.coaching_completed) return `${base}/practice`
+    return `${base}/coaching`
+  }
+
+  /** Return a label + icon for the topic's current state */
+  const getTopicState = (planId: string, topic: string) => {
+    const prog = getTopicProgress(planId, topic)
+    if (!prog || (!prog.coaching_completed && !prog.practice_completed && !prog.exam_completed)) {
+      return { label: 'Start', icon: Sparkles, color: 'text-primary', bg: 'bg-primary/10' }
+    }
+    if (prog.exam_completed) {
+      return { label: `${prog.exam_score ?? 0}%`, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' }
+    }
+    if (prog.practice_completed) {
+      return { label: 'Exam', icon: Award, color: 'text-amber-600', bg: 'bg-amber-50' }
+    }
+    if (prog.coaching_completed) {
+      return { label: 'Practice', icon: Play, color: 'text-blue-600', bg: 'bg-blue-50' }
+    }
+    return { label: 'Start', icon: Sparkles, color: 'text-primary', bg: 'bg-primary/10' }
+  }
+
+  const toggleExpanded = (planId: string) => {
+    setExpandedPlans(prev => ({ ...prev, [planId]: !prev[planId] }))
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
@@ -238,7 +295,12 @@ export default function Dashboard() {
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {studyPlans.map((plan) => {
-                const completionPct = summary?.avg_completion ?? 0
+                const progArr = planProgress[plan.id] || []
+                const totalSteps = (plan.topics?.length || 0) * 3
+                const completedSteps = progArr.reduce((acc, p) => {
+                  return acc + (p.coaching_completed ? 1 : 0) + (p.practice_completed ? 1 : 0) + (p.exam_completed ? 1 : 0)
+                }, 0)
+                const completionPct = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0
                 const statusConfig = {
                   active: { 
                     badge: 'success',
@@ -286,21 +348,82 @@ export default function Dashboard() {
                     </CardHeader>
 
                     <CardContent>
-                      {/* Topics */}
-                      <div className="mb-6">
-                        <div className="flex flex-wrap gap-2">
-                          {plan.topics?.slice(0, 3).map((topic, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {topic}
-                            </Badge>
-                          ))}
-                          {plan.topics && plan.topics.length > 3 && (
-                            <Badge variant="outline" className="text-xs text-muted-foreground">
-                              +{plan.topics.length - 3} more
-                            </Badge>
-                          )}
+                      {/* Expand/Collapse Toggle */}
+                      <button
+                        onClick={() => toggleExpanded(plan.id)}
+                        className="flex items-center justify-between w-full text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
+                      >
+                        <span>{plan.topics?.length || 0} Topics</span>
+                        {expandedPlans[plan.id] ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+
+                      {/* Topic Links */}
+                      {expandedPlans[plan.id] && (
+                        <div className="space-y-2 mb-6">
+                          {plan.topics?.map((topic, index) => {
+                            const state = getTopicState(plan.id, topic)
+                            const StateIcon = state.icon
+                            const prog = getTopicProgress(plan.id, topic)
+                            const stepsComplete = prog
+                              ? [prog.coaching_completed, prog.practice_completed, prog.exam_completed].filter(Boolean).length
+                              : 0
+
+                            return (
+                              <Link
+                                key={index}
+                                href={getTopicLink(plan.id, topic)}
+                                className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors group/topic"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={`flex items-center justify-center h-7 w-7 rounded-full ${state.bg} shrink-0`}>
+                                    <StateIcon className={`h-3.5 w-3.5 ${state.color}`} />
+                                  </div>
+                                  <span className="text-sm font-medium text-foreground truncate group-hover/topic:text-primary transition-colors">
+                                    {topic}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* Mini step dots */}
+                                  <div className="flex gap-1">
+                                    <div className={`h-1.5 w-1.5 rounded-full ${prog?.coaching_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Coaching" />
+                                    <div className={`h-1.5 w-1.5 rounded-full ${prog?.practice_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Practice" />
+                                    <div className={`h-1.5 w-1.5 rounded-full ${prog?.exam_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Exam" />
+                                  </div>
+                                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover/topic:text-primary group-hover/topic:translate-x-0.5 transition-all" />
+                                </div>
+                              </Link>
+                            )
+                          })}
                         </div>
-                      </div>
+                      )}
+
+                      {/* Collapsed topic badges */}
+                      {!expandedPlans[plan.id] && (
+                        <div className="mb-6">
+                          <div className="flex flex-wrap gap-2">
+                            {plan.topics?.slice(0, 3).map((topic, index) => (
+                              <Link key={index} href={getTopicLink(plan.id, topic)}>
+                                <Badge variant="outline" className="text-xs hover:bg-primary/10 hover:border-primary/30 cursor-pointer transition-colors">
+                                  {topic}
+                                </Badge>
+                              </Link>
+                            ))}
+                            {plan.topics && plan.topics.length > 3 && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs text-muted-foreground cursor-pointer hover:text-foreground"
+                                onClick={(e) => { e.preventDefault(); toggleExpanded(plan.id) }}
+                              >
+                                +{plan.topics.length - 3} more
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Progress */}
                       <div className="mb-6">
@@ -314,7 +437,7 @@ export default function Dashboard() {
                       {/* Action */}
                       <Link href={`/plans/${plan.id}`} className="w-full">
                         <Button variant="outline" className="w-full group/btn">
-                          Continue Learning
+                          View Full Plan
                           <ArrowRight className="h-4 w-4 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                         </Button>
                       </Link>
