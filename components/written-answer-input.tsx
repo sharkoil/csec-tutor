@@ -32,6 +32,8 @@ interface WrittenAnswerInputProps {
   topic?: string
   /** Question type — controls textarea size */
   type: 'shortanswer' | 'extended'
+  /** User ID for authenticated API calls */
+  userId?: string
 }
 
 export default function WrittenAnswerInput({
@@ -41,6 +43,7 @@ export default function WrittenAnswerInput({
   subject,
   topic,
   type,
+  userId,
 }: WrittenAnswerInputProps) {
   const [answer, setAnswer] = useState('')
   const [grading, setGrading] = useState<GradingResult | null>(null)
@@ -63,7 +66,10 @@ export default function WrittenAnswerInput({
     try {
       const res = await fetch('/api/ai/grade-answer', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(userId ? { 'x-user-id': userId } : {}),
+        },
         body: JSON.stringify({
           question,
           modelAnswer: modelAnswer || '',

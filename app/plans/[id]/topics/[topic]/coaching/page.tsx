@@ -272,6 +272,7 @@ function AnswerReveal({ children, label = 'Show Answer' }: { children: React.Rea
 interface RenderContext {
   subject?: string
   topic?: string
+  userId?: string
 }
 
 function renderMarkdown(markdown: string, ctx: RenderContext = {}): React.ReactNode {
@@ -570,6 +571,7 @@ function renderMarkdown(markdown: string, ctx: RenderContext = {}): React.ReactN
             subject={ctx.subject}
             topic={ctx.topic}
             type={type as 'shortanswer' | 'extended'}
+            userId={ctx.userId}
           />
         )}
         <AnswerReveal label={revealLabel}>
@@ -1489,7 +1491,7 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
                   <div className="lg:grid lg:grid-cols-[1fr_260px] lg:gap-8 mt-6">
                     {/* Lesson content — no Card wrapper, full width */}
                     <div className="prose-lesson max-w-none min-w-0">
-                      {renderMarkdown(currentPageMarkdown, { subject: plan?.subject, topic })}
+                      {renderMarkdown(currentPageMarkdown, { subject: plan?.subject, topic, userId: user?.id })}
                     </div>
 
                     {/* Sidebar outline */}
