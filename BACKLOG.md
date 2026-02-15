@@ -49,6 +49,40 @@
 - **Change:** Progress bar is now `sticky top-0 z-10` with `backdrop-blur-sm bg-gray-50/95`. Shows "Part X of Y" center label. Stays visible while scrolling.
 - **File:** `app/plans/[id]/topics/[topic]/coaching/page.tsx`
 
+### ✅ Task 13-16: Prompt Engineering Overhaul
+- **Changes across all 3 prompts (STEM, Writing, General):**
+  - Age: "14-year-old" → "14-16 year-old Caribbean secondary student (Form 4-5)"
+  - Reading level: 9th-10th grade — clear and accessible but not childish
+  - Section count: 12 → 10 (merged Learning Objectives + Why → "Why This Topic Matters & What You'll Learn"; merged Micro-Summary + Real-World → "Summary & Real-World Connections")
+  - Paragraphs: "3-4 sentences max" → "2-3 sentences. Start each paragraph with the key point."
+  - Scenario-first: "Open EVERY subtopic with a relatable Caribbean scenario, THEN define the concept. Never start with a dictionary definition."
+  - Thoroughness: "This lesson may be the student's ONLY resource — they may not have a textbook. Be THOROUGH."
+  - Subtopic depth: "Do NOT thin out subtopics. If a student reads only this lesson, they should fully understand every subtopic."
+  - Word count: "3000-4000" → "3000-4500"
+- **File:** `lib/ai-coach.ts`
+
+### ✅ Task 19: Chat Helper with Responsible AI Guardrails
+- **API:** `app/api/ai/chat/route.ts`
+  - Scoped system prompt: only answers questions about the current subject/topic
+  - Input sanitization: max 500 chars, HTML/markdown stripping, prompt injection detection (11 regex patterns)
+  - Output filtering: catches model self-references that could leak prompt info
+  - Rate limiting: 15 messages per 30-minute session (in-memory, per session ID)
+  - Vector DB context: wraps in `<reference_material>` delimiters marked "read-only"
+  - Lesson excerpt: passes current page content (truncated to 2000 chars) for context
+  - Uses UTILITY model tier to control costs
+  - Tracks usage via `ai_usage` table (fire-and-forget)
+  - Graceful fallback on 402 (credits exhausted)
+- **UI:** `components/lesson-chat.tsx`
+  - Floating blue "Ask a Question" bubble (bottom-right, fixed position)
+  - Expands into 360×500px chat panel with header, messages, input
+  - Session-scoped: resets on page reload (no cross-session leakage)
+  - Shows remaining question count when ≤3
+  - Typing indicators (bouncing dots)
+  - Keyboard support (Enter to send, Shift+Enter for newline)
+  - Responsive: max-width adapts to viewport
+- **Integration:** Added to `coaching/page.tsx` — only renders when lesson is loaded
+- **Commit:** `78debdf`
+
 ---
 
 ## Remaining — Not Started
@@ -73,23 +107,6 @@
 - Render as highlighted summary card
 - **Effort:** 1 hour
 
-### Task 13: Shorten paragraphs to 2-3 sentences (P4 — Prompt)
-- Add to system prompt: "Keep every paragraph to 2-3 sentences maximum."
-- **Effort:** 5 min
-
-### Task 14: Lead with Caribbean examples (P4 — Prompt)
-- Add to prompt: "Open each subtopic with a relatable Caribbean scenario, not a definition."
-- **Effort:** 5 min
-
-### Task 15: Reduce section count 12→7-8 (P4 — Prompt)
-- Merge Learning Objectives + Why This Topic Matters
-- Merge Micro-Summary + Real-World Application
-- **Effort:** 30 min
-
-### Task 16: Target 6th-8th grade reading level (P4 — Prompt)
-- Add reading level instruction to AI prompt
-- **Effort:** 5 min
-
 ### Task 17: Segmented progress bar with section titles (P5)
 - Replace simple bar with labeled segments, clickable to jump
 - **Effort:** 1-2 hours
@@ -109,6 +126,7 @@
 | P1       | 4     | 4    | 0         |
 | P2       | 3     | 3    | 0         |
 | P3       | 3     | 1    | 2         |
-| P4       | 4     | 0    | 4         |
+| P4 (Prompt) | 4  | 4    | 0         |
 | P5       | 2     | 0    | 2         |
-| **Total**| **20**| **11** | **9**  |
+| New      | 1     | 1    | 0         |
+| **Total**| **21**| **16** | **5**  |
