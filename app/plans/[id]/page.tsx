@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useMemo, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, BookOpen, Play, Award, CheckCircle, Sparkles } from 'lucide-react'
+import { Loader2, ArrowLeft, BookOpen, Play, Award, CheckCircle, Sparkles, CalendarDays, LayoutGrid } from 'lucide-react'
 import { fetchPlan as fetchPlanFromStorage, fetchProgress as fetchProgressFromStorage } from '@/lib/plan-storage'
-import { StudyPlan, Progress } from '@/types'
+import { StudyPlan, Progress, WizardData } from '@/types'
+import { generateStudySchedule } from '@/lib/study-schedule'
+import StudyCalendar from '@/components/study-calendar'
 
 export default function PlanPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: planId } = use(params)
@@ -17,6 +19,7 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
   const [plan, setPlan] = useState<StudyPlan | null>(null)
   const [progress, setProgress] = useState<Progress[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [view, setView] = useState<'calendar' | 'topics'>('calendar')
 
   useEffect(() => {
     if (!loading && !user) {
@@ -81,6 +84,18 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
     return totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0
   }
 
+  // Generate study schedule from wizard data
+  const schedule = useMemo(() => {
+    if (!plan?.wizard_data) return null
+    return generateStudySchedule(plan.subject, plan.topics, plan.wizard_data, progress)
+  }, [plan, progress])
+
+  // Navigate to topic's coaching page when clicked in calendar
+  const handleTopicClick = (topic: string) => {
+    if (!plan) return
+    router.push(`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/coaching`)
+  }
+
   if (loading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -135,8 +150,43 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
           </div>
         </div>
 
+        {/* View Toggle */}
+        {schedule && (
+          <div className="flex items-center gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+            <button
+              onClick={() => setView('calendar')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                view === 'calendar'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <CalendarDays className="h-4 w-4" />
+              Study Calendar
+            </button>
+            <button
+              onClick={() => setView('topics')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                view === 'topics'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              All Topics
+            </button>
+          </div>
+        )}
+
+        {/* Calendar View */}
+        {schedule && view === 'calendar' && (
+          <div className="mb-8">
+            <StudyCalendar schedule={schedule} onTopicClick={handleTopicClick} />
+          </div>
+        )}
+
         {/* Topics Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className={`grid lg:grid-cols-3 gap-6 ${schedule && view === 'calendar' ? 'hidden' : ''}`}>
           {plan.topics.map((topic) => {
             const topicProgress = getProgressForTopic(topic)
             const topicPercentage = [
