@@ -8,19 +8,18 @@ import Link from 'next/link'
    One-page site targeting students, parents, teachers, and lesson providers.
    ───────────────────────────────────────────────────────────────────────────── */
 
-const COMPARISON = [
-  { feature: 'Built on the actual CSEC syllabus', us: true, them: false },
-  { feature: 'Past paper questions & mark schemes', us: true, them: false },
-  { feature: 'Structured lesson plans per topic', us: true, them: false },
-  { feature: 'Auto-generated practice quizzes', us: true, them: false },
-  { feature: 'Exam-format mock tests (MCQ + structured)', us: true, them: false },
-  { feature: 'AI grading with examiner-style feedback', us: true, them: false },
-  { feature: 'Progress tracking for parents & teachers', us: true, them: false },
-  { feature: 'Study calendar tied to exam dates', us: true, them: false },
-  { feature: 'Adapts to each student\'s weak areas', us: true, them: false },
-  { feature: 'Safe, focused — can\'t go off-topic', us: true, them: false },
-  { feature: 'Works without prompt engineering', us: true, them: false },
-  { feature: 'General knowledge Q&A', us: true, them: true },
+const COMPARISON: { feature: string; us: boolean; them: boolean | 'partial' }[] = [
+  { feature: 'Knows the CSEC syllabus — every topic, every objective', us: true, them: false },
+  { feature: 'Lessons built from real CSEC textbooks & past papers', us: true, them: false },
+  { feature: 'Saves your progress and remembers where you left off', us: true, them: false },
+  { feature: 'Study plans tied to your actual exam date', us: true, them: false },
+  { feature: 'Practice quizzes in real CSEC exam format', us: true, them: 'partial' },
+  { feature: 'Mock exams with proper CSEC mark schemes', us: true, them: false },
+  { feature: 'AI grading that follows CSEC marking style', us: true, them: 'partial' },
+  { feature: 'Parents & teachers can see scores and progress', us: true, them: false },
+  { feature: 'Finds your weak topics and focuses your study there', us: true, them: false },
+  { feature: 'Content guided by real CSEC teachers', us: true, them: false },
+  { feature: 'Safe — can\'t be used to write homework or go off-topic', us: true, them: false },
 ]
 
 const AUDIENCES = [
@@ -30,14 +29,14 @@ const AUDIENCES = [
     title: 'Students',
     subtitle: 'Ages 13–17 preparing for CSEC',
     points: [
-      'Get a personal tutor that actually knows your syllabus — not generic internet answers',
-      'Lessons break down every topic step-by-step, like the best teacher you\'ve ever had',
-      'Practice with real CSEC-format questions and see exactly where you\'re losing marks',
-      'Submit your written answers and get instant AI feedback — no waiting for your teacher',
-      'Track your progress: coaching → practice → exam for every topic, every subject',
-      'Study plans adapt to YOUR weak areas so you spend time where it matters most',
+      'A personal tutor that actually knows your syllabus — not random internet answers that might be wrong',
+      'Lessons explain every topic step-by-step using real CSEC textbook content, not Wikipedia summaries',
+      'Practice with questions in the exact format you\'ll see on exam day — MCQ, short answer, extended response',
+      'Write your answer, hit submit, and get instant marking with feedback — no waiting days for your teacher',
+      'Your scores, progress, and weak areas are all saved — pick up right where you left off every session',
+      'ChatGPT can make you a quiz, but it doesn\'t know what\'s actually on the CSEC exam. We do.',
     ],
-    cta: 'ChatGPT doesn\'t know what\'s on your CSEC exam. We do.',
+    cta: 'ChatGPT forgets you the moment you close the tab. We remember every topic you\'ve covered.',
   },
   {
     id: 'parents',
@@ -45,14 +44,14 @@ const AUDIENCES = [
     title: 'Parents',
     subtitle: 'See exactly what your child is learning',
     points: [
-      'Dashboard shows completion rates and scores — you\'ll know if they\'re actually studying',
-      'No more guessing: see which topics they\'re struggling with and where they excel',
-      'Safe, focused environment — your child can\'t use it to write essays or browse off-topic content',
-      'Structured curriculum means your child follows a proven path, not random ChatGPT conversations',
-      'Cheaper than a private tutor ($80–150/month) while available 24/7, any time they need help',
-      'Built by Caribbean educators who understand the CSEC marking scheme and exam format',
+      'Dashboard shows real completion rates and scores — you\'ll know if they\'re actually studying or just saying they are',
+      'See which topics they\'re struggling with and where they\'re doing well — no more guessing',
+      'Safe, focused environment — your child can\'t use it to write their homework for them or go off-topic',
+      'Every lesson follows the actual CSEC syllabus, reviewed by real Caribbean teachers who\'ve taught these subjects',
+      'All progress is saved — unlike ChatGPT, which starts from zero every conversation with no memory of your child',
+      'Costs less than a single hour with a private tutor, but available 24/7 across all 31 subjects',
     ],
-    cta: '$20/month is less than one hour with a private tutor. Your child gets unlimited access.',
+    cta: '$20/month for every subject, unlimited practice, and real progress tracking. A private tutor charges that per hour.',
   },
   {
     id: 'teachers',
@@ -60,36 +59,21 @@ const AUDIENCES = [
     title: 'Teachers',
     subtitle: 'Extend your classroom, save hours of prep',
     points: [
-      'Assign topics and track which students completed lessons, practice, and exams',
-      'AI-generated lessons are aligned to the CSEC syllabus — not generic content',
-      'Practice quizzes and exams are auto-generated in official CSEC format with proper mark allocation',
+      'Assign topics and see exactly which students completed their lessons, practice, and exams',
+      'All content is aligned to the CSEC syllabus and guided by experienced Caribbean educators',
+      'Practice quizzes and exams follow official CSEC format with proper mark allocation — not generic multiple choice',
       'Students get instant feedback on written answers, freeing you from grading mountains of homework',
-      'Identify struggling students early — confidence ratings and scores highlight who needs attention',
-      'Supplement your teaching with 24/7 AI tutoring that reinforces what you taught in class',
+      'Identify struggling students early — confidence ratings and scores show who needs extra attention',
+      'Everything is stored: student progress, scores, and weak areas persist between sessions — not lost like a ChatGPT conversation',
     ],
-    cta: 'Your teaching, amplified. Students learn more, you grade less.',
-  },
-  {
-    id: 'lessons',
-    icon: '🏫',
-    title: 'After-School Lesson Providers',
-    subtitle: 'Scale your tutoring business',
-    points: [
-      'Offer every CSEC subject without hiring specialist teachers for each one',
-      'Students arrive at lessons already briefed — spend session time on problem areas, not basics',
-      'Track every student\'s progress across all subjects from one dashboard',
-      'Differentiate your business: "AI-powered CSEC preparation" is a compelling selling point',
-      'Reduce no-show impact — students still learn on days they can\'t attend in person',
-      'White-label potential: position it as part of your lesson programme',
-    ],
-    cta: 'One platform, 31 CSEC subjects. No extra teachers needed.',
+    cta: 'Your teaching, amplified. Built on real CSEC curriculum with real teacher input.',
   },
 ]
 
 const FAQS = [
   {
     q: 'How is this different from just using ChatGPT?',
-    a: 'ChatGPT is a general-purpose chatbot. It doesn\'t know what\'s on the CSEC syllabus, doesn\'t have access to real past papers, can\'t generate exam-format questions with proper mark schemes, and can\'t track your child\'s progress. It also frequently gives wrong answers for Caribbean-specific content. CSEC Tutor is purpose-built for CSEC — every lesson, every question, every piece of feedback is grounded in the actual syllabus and real past paper content.',
+    a: 'ChatGPT is a powerful tool — it can answer questions, generate quizzes, and even grade answers. But it doesn\'t know the CSEC syllabus, doesn\'t have real past papers, and starts from scratch every time you open a new chat. CSEC Tutor is built specifically for CSEC: our lessons come from real textbooks and past papers, our quizzes match the actual exam format with proper mark schemes, and we save your child\'s progress, scores, and weak areas between sessions. Our content is guided by real Caribbean teachers who know exactly what the examiners are looking for. ChatGPT gives generic answers — we give CSEC-specific preparation.',
   },
   {
     q: 'What subjects are covered?',
@@ -113,7 +97,7 @@ const FAQS = [
   },
   {
     q: 'Can it replace a private tutor?',
-    a: 'For many students, yes — especially for content understanding, practice, and exam preparation. A private tutor costs $80–150+ per month for just one subject, one hour per week. CSEC Tutor provides unlimited access to all subjects, 24/7, with instant feedback. For students who need in-person support, it\'s the perfect complement — they arrive at tutoring sessions better prepared.',
+    a: 'For many students, yes — especially for content understanding, practice, and exam preparation. A private tutor costs $80–150+ per month for just one subject, one hour per week. CSEC Tutor provides unlimited access to all subjects, 24/7, with instant feedback. Our content is guided by experienced CSEC teachers who\'ve shaped the curriculum and best practices. For students who need in-person support, it\'s the perfect complement — they arrive at tutoring sessions better prepared.',
   },
 ]
 
@@ -192,28 +176,28 @@ export default function MarketingPage() {
       <section id="why" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">The Problem With &ldquo;Just Use ChatGPT&rdquo;</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">ChatGPT Is Smart. But It&apos;s Not Enough.</h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Parents hear &ldquo;AI can help with studying&rdquo; — but generic AI chatbots 
-              create more problems than they solve for CSEC students.
+              ChatGPT can answer questions and even make quizzes — but it doesn&apos;t know what&apos;s
+              on the CSEC exam, and it forgets everything the moment you close the chat.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                icon: '❌',
-                title: 'Wrong Answers, Confidently Given',
-                desc: 'ChatGPT frequently hallucinates facts, especially for Caribbean-specific content. Students can\'t tell what\'s correct and what\'s made up. They study wrong information and lose marks.',
+                icon: '🧠',
+                title: 'No Memory Between Sessions',
+                desc: 'Every ChatGPT conversation starts from zero. It doesn\'t remember what your child studied last week, which topics they\'re weak in, or what score they got. CSEC Tutor saves everything.',
               },
               {
                 icon: '🎯',
-                title: 'No Curriculum Alignment',
-                desc: 'ChatGPT doesn\'t know what\'s on the CSEC syllabus. It can\'t tell your child which topics to study, what format the exam uses, or how marks are allocated. It\'s flying blind.',
+                title: 'Not Built for CSEC',
+                desc: 'ChatGPT can generate a quiz — but not in CSEC exam format, with proper mark schemes, or covering the right syllabus objectives. It doesn\'t know what the examiner is looking for.',
               },
               {
-                icon: '📊',
-                title: 'Zero Accountability',
-                desc: 'No progress tracking, no scores, no completion records. Parents have no way to verify their child actually studied — or just asked ChatGPT to write their homework for them.',
+                icon: '👩‍🏫',
+                title: 'No Real Teachers Behind It',
+                desc: 'CSEC Tutor\'s content is guided by experienced Caribbean teachers who know the syllabus, the marking scheme, and what students actually struggle with. ChatGPT is guessing.',
               },
             ].map(item => (
               <div key={item.title} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
@@ -256,7 +240,7 @@ export default function MarketingPage() {
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">CSEC Tutor vs ChatGPT</h2>
-            <p className="text-lg text-gray-600">Side by side, there&apos;s no comparison.</p>
+            <p className="text-lg text-gray-600">ChatGPT is smart — but it doesn&apos;t know your syllabus, save your progress, or follow your exam format.</p>
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             {/* Header */}
@@ -270,11 +254,11 @@ export default function MarketingPage() {
               <div key={i} className={`grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${i < COMPARISON.length - 1 ? 'border-b border-gray-100' : ''}`}>
                 <div className="p-4 text-sm text-gray-700">{row.feature}</div>
                 <div className="p-4 text-center text-lg">{row.us ? '✅' : '❌'}</div>
-                <div className="p-4 text-center text-lg">{row.them ? '⚠️' : '❌'}</div>
+                <div className="p-4 text-center text-lg">{row.them === true ? '✅' : row.them === 'partial' ? '⚠️' : '❌'}</div>
               </div>
             ))}
           </div>
-          <p className="text-center text-xs text-gray-400 mt-4">⚠️ = Technically possible but unreliable — requires expert prompt engineering and verification</p>
+          <p className="text-center text-xs text-gray-400 mt-4">⚠️ = ChatGPT can do this in a general way, but not specifically for CSEC format, syllabus, or mark schemes</p>
         </div>
       </section>
 
@@ -283,7 +267,7 @@ export default function MarketingPage() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Built For Everyone In The Education Journey</h2>
-            <p className="text-lg text-gray-600">Whether you&apos;re studying, parenting, teaching, or tutoring.</p>
+            <p className="text-lg text-gray-600">Whether you&apos;re studying, parenting, or teaching.</p>
           </div>
 
           {/* Audience tabs */}
@@ -360,7 +344,8 @@ export default function MarketingPage() {
                 <li>• <strong>Unlimited</strong> lessons & practice</li>
                 <li>• Real CSEC past paper content</li>
                 <li>• AI grading with feedback</li>
-                <li>• Parent progress dashboard</li>
+                <li>• Guided by real CSEC teachers</li>
+                <li>• Progress saved between sessions</li>
                 <li>• Available 24/7</li>
               </ul>
             </div>
@@ -371,11 +356,11 @@ export default function MarketingPage() {
               <div className="text-sm text-gray-500 mb-6">*Plus is $20/mo too</div>
               <ul className="text-left space-y-2 text-sm text-gray-400">
                 <li>• No CSEC syllabus knowledge</li>
-                <li>• Frequently wrong answers</li>
-                <li>• No progress tracking</li>
-                <li>• No exam-format practice</li>
-                <li>• No accountability</li>
-                <li>• Can be used for homework fraud</li>
+                <li>• Can make quizzes, but not CSEC format</li>
+                <li>• Forgets everything each session</li>
+                <li>• No saved progress or scores</li>
+                <li>• No real teacher input</li>
+                <li>• Can be used to write homework</li>
               </ul>
             </div>
           </div>
