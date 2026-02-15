@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap, Eye, EyeOff } from 'lucide-react'
 import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } from '@/lib/plan-storage'
 import { renderMathInText, containsMath } from '@/components/math-renderer'
+import LessonChat from '@/components/lesson-chat'
 
 // Enhanced CoachingResponse with narrative content and fallback info
 interface GraduatedExample {
@@ -1651,6 +1652,16 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
           </div>
         )}
       </main>
+
+      {/* Floating chat helper — only show when lesson is loaded */}
+      {coaching && plan && (
+        <LessonChat
+          subject={plan.subject}
+          topic={topic}
+          userId={user?.id}
+          lessonExcerpt={coaching.narrativeContent ? paginateContent(coaching.narrativeContent)[currentPage - 1] : undefined}
+        />
+      )}
     </div>
   )
 }
