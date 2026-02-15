@@ -5,16 +5,16 @@ import Link from 'next/link'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CSEC Tutor – Marketing Landing Page
-   One-page site targeting students, parents, teachers, and lesson providers.
+   One-page site targeting students, parents, and teachers.
    ───────────────────────────────────────────────────────────────────────────── */
 
 const COMPARISON: { feature: string; us: boolean; them: boolean | 'partial' }[] = [
   { feature: 'Knows the CSEC syllabus — every topic, every objective', us: true, them: false },
-  { feature: 'Lessons built from real CSEC textbooks & past papers', us: true, them: false },
+  { feature: 'Lessons aligned to the official CSEC syllabus and exam style', us: true, them: false },
   { feature: 'Saves your progress and remembers where you left off', us: true, them: false },
   { feature: 'Study plans tied to your actual exam date', us: true, them: false },
   { feature: 'Practice quizzes in real CSEC exam format', us: true, them: 'partial' },
-  { feature: 'Mock exams with proper CSEC mark schemes', us: true, them: false },
+  { feature: 'Mock exams with CSEC-style mark allocation', us: true, them: false },
   { feature: 'AI grading that follows CSEC marking style', us: true, them: 'partial' },
   { feature: 'Parents & teachers can see scores and progress', us: true, them: false },
   { feature: 'Finds your weak topics and focuses your study there', us: true, them: false },
@@ -30,7 +30,7 @@ const AUDIENCES = [
     subtitle: 'Ages 13–17 preparing for CSEC',
     points: [
       'A personal tutor that actually knows your syllabus — not random internet answers that might be wrong',
-      'Lessons explain every topic step-by-step using real CSEC textbook content, not Wikipedia summaries',
+      'Lessons explain every topic step-by-step, aligned to the actual CSEC syllabus — not Wikipedia summaries',
       'Practice with questions in the exact format you\'ll see on exam day — MCQ, short answer, extended response',
       'Write your answer, hit submit, and get instant marking with feedback — no waiting days for your teacher',
       'Your scores, progress, and weak areas are all saved — pick up right where you left off every session',
@@ -47,7 +47,7 @@ const AUDIENCES = [
       'Dashboard shows real completion rates and scores — you\'ll know if they\'re actually studying or just saying they are',
       'See which topics they\'re struggling with and where they\'re doing well — no more guessing',
       'Safe, focused environment — your child can\'t use it to write their homework for them or go off-topic',
-      'Every lesson follows the actual CSEC syllabus, reviewed by real Caribbean teachers who\'ve taught these subjects',
+      'Every lesson follows the actual CSEC syllabus, guided by experienced Caribbean teachers who know these subjects inside out',
       'All progress is saved — unlike ChatGPT, which starts from zero every conversation with no memory of your child',
       'Costs less than a single hour with a private tutor, but available 24/7 across all 31 subjects',
     ],
@@ -61,23 +61,23 @@ const AUDIENCES = [
     points: [
       'Assign topics and see exactly which students completed their lessons, practice, and exams',
       'All content is aligned to the CSEC syllabus and guided by experienced Caribbean educators',
-      'Practice quizzes and exams follow official CSEC format with proper mark allocation — not generic multiple choice',
+      'Practice quizzes and exams follow CSEC exam format with proper mark allocation — not generic multiple choice',
       'Students get instant feedback on written answers, freeing you from grading mountains of homework',
       'Identify struggling students early — confidence ratings and scores show who needs extra attention',
       'Everything is stored: student progress, scores, and weak areas persist between sessions — not lost like a ChatGPT conversation',
     ],
-    cta: 'Your teaching, amplified. Built on real CSEC curriculum with real teacher input.',
+    cta: 'Your teaching, amplified. Curriculum-aligned content with real teacher input.',
   },
 ]
 
 const FAQS = [
   {
     q: 'How is this different from just using ChatGPT?',
-    a: 'ChatGPT is a powerful tool — it can answer questions, generate quizzes, and even grade answers. But it doesn\'t know the CSEC syllabus, doesn\'t have real past papers, and starts from scratch every time you open a new chat. CSEC Tutor is built specifically for CSEC: our lessons come from real textbooks and past papers, our quizzes match the actual exam format with proper mark schemes, and we save your child\'s progress, scores, and weak areas between sessions. Our content is guided by real Caribbean teachers who know exactly what the examiners are looking for. ChatGPT gives generic answers — we give CSEC-specific preparation.',
+    a: 'ChatGPT is a powerful tool — it can answer questions, generate quizzes, and even grade answers. But it doesn\'t know the CSEC syllabus and starts from scratch every time you open a new chat. CSEC Tutor is built specifically for CSEC: our lessons are aligned to the official syllabus, our quizzes match the actual exam format and marking style, and we save your child\'s progress, scores, and weak areas between sessions. Our content is guided by experienced Caribbean teachers who know exactly what the examiners are looking for. ChatGPT gives generic answers — we give CSEC-specific preparation.',
   },
   {
     q: 'What subjects are covered?',
-    a: 'We currently cover 31 CSEC subjects including Mathematics, English A, Biology, Chemistry, Physics, Principles of Business, Geography, Social Studies, and more. Our content database contains over 400,000 chunks from 377 real CSEC textbooks, syllabi, and past papers.',
+    a: 'We currently cover 31 CSEC subjects including Mathematics, English A, Biology, Chemistry, Physics, Principles of Business, Geography, Social Studies, and more. All content is aligned to the official CSEC syllabus and guided by experienced Caribbean educators.',
   },
   {
     q: 'Can I see my child\'s progress?',
@@ -85,7 +85,7 @@ const FAQS = [
   },
   {
     q: 'Is the AI grading accurate?',
-    a: 'Our AI grades against model answers from actual CSEC mark schemes. It awards partial marks just like a real examiner, identifies strengths, highlights areas for improvement, and points out key concepts the student missed. While no AI is perfect, it provides immediate, substantive feedback that helps students improve between sessions.',
+    a: 'Our AI grades using CSEC-style marking criteria. It awards partial marks, identifies strengths, highlights areas for improvement, and points out key concepts the student missed. While no AI is perfect, it provides immediate, substantive feedback that helps students improve between sessions.',
   },
   {
     q: 'What if my child is a complete beginner in a subject?',
@@ -103,9 +103,9 @@ const FAQS = [
 
 const STATS = [
   { value: '31', label: 'CSEC Subjects' },
-  { value: '400K+', label: 'Content Chunks' },
-  { value: '377', label: 'Source Documents' },
   { value: '24/7', label: 'Availability' },
+  { value: '100%', label: 'Syllabus Aligned' },
+  { value: '∞', label: 'Practice Questions' },
 ]
 
 export default function MarketingPage() {
@@ -148,7 +148,7 @@ export default function MarketingPage() {
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-10 leading-relaxed">
             AI-powered tutoring built on the <strong>actual CSEC curriculum</strong>, 
-            <strong> real past papers</strong>, and <strong>examiner-standard marking</strong>. 
+            with <strong>syllabus-aligned content</strong> and <strong>exam-style marking</strong>. 
             Structured lessons, practice quizzes, mock exams, and instant AI grading — 
             for <strong>every subject</strong>, at a fraction of the cost of a private tutor.
           </p>
@@ -220,7 +220,7 @@ export default function MarketingPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
               { step: '1', icon: '📋', title: 'Tell Us Your Level', desc: 'Pick your subjects, target grade, and confidence in each topic. The AI builds a personalised plan.' },
-              { step: '2', icon: '📖', title: 'Learn With AI Lessons', desc: 'Deep, textbook-quality lessons generated from real CSEC content — not generic internet summaries.' },
+              { step: '2', icon: '📖', title: 'Learn With AI Lessons', desc: 'Deep, syllabus-aligned lessons covering every CSEC topic in detail — not generic internet summaries.' },
               { step: '3', icon: '✍️', title: 'Practice & Get Graded', desc: 'MCQ quizzes, short answer, and extended response questions — all graded instantly by AI with detailed feedback.' },
               { step: '4', icon: '🏆', title: 'Track & Improve', desc: 'See exactly where you\'re strong and where you need work. Parents and teachers can monitor progress.' },
             ].map(item => (
@@ -342,7 +342,7 @@ export default function MarketingPage() {
               <ul className="text-left space-y-2 text-sm text-blue-100">
                 <li>• <strong>31 CSEC subjects</strong></li>
                 <li>• <strong>Unlimited</strong> lessons & practice</li>
-                <li>• Real CSEC past paper content</li>
+                <li>• Syllabus-aligned exam-style content</li>
                 <li>• AI grading with feedback</li>
                 <li>• Guided by real CSEC teachers</li>
                 <li>• Progress saved between sessions</li>
