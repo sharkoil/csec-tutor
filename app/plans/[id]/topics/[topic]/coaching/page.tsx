@@ -1,15 +1,198 @@
 'use client'
 
-import { useState, useEffect, useRef, use } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap, Eye, EyeOff } from 'lucide-react'
+import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, GraduationCap, PenTool, Clock, AlertTriangle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Zap, Eye, EyeOff, List, X as XIcon } from 'lucide-react'
 import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } from '@/lib/plan-storage'
 import { renderMathInText, containsMath } from '@/components/math-renderer'
 import LessonChat from '@/components/lesson-chat'
+
+// ─── Heading utilities ────────────────────────────────────────────────────────
+
+/** Convert heading text to a URL-safe slug for anchor IDs */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')  // strip emoji & special chars
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80)
+}
+
+interface HeadingEntry {
+  level: 2 | 3
+  text: string
+  id: string
+}
+
+/** Extract h2/h3 headings from markdown for sidebar outline */
+function extractHeadings(markdown: string): HeadingEntry[] {
+  if (!markdown) return []
+  const headings: HeadingEntry[] = []
+  const lines = markdown.split('\n')
+  for (const line of lines) {
+    const m2 = line.match(/^## (.+)/)
+    if (m2) {
+      const text = m2[1].replace(/\*\*/g, '').trim()
+      headings.push({ level: 2, text, id: slugify(text) })
+      continue
+    }
+    const m3 = line.match(/^### (.+)/)
+    if (m3) {
+      const text = m3[1].replace(/\*\*/g, '').trim()
+      headings.push({ level: 3, text, id: slugify(text) })
+    }
+  }
+  return headings
+}
+
+// ─── Lesson Sidebar ───────────────────────────────────────────────────────────
+
+function LessonSidebar({ headings, currentPage, totalPages, onPageChange }: {
+  headings: HeadingEntry[]
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}) {
+  const [activeId, setActiveId] = useState<string>('')
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  // IntersectionObserver to highlight the heading currently in view
+  useEffect(() => {
+    if (headings.length === 0) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Pick the first intersecting heading
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveId(entry.target.id)
+            break
+          }
+        }
+      },
+      { rootMargin: '-80px 0px -60% 0px', threshold: 0.1 }
+    )
+    for (const h of headings) {
+      const el = document.getElementById(h.id)
+      if (el) observer.observe(el)
+    }
+    return () => observer.disconnect()
+  }, [headings])
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setActiveId(id)
+      setMobileOpen(false)
+    }
+  }
+
+  const sidebarContent = (
+    <>
+      {/* Page selector (when multi-page) */}
+      {totalPages > 1 && (
+        <div className="mb-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Pages</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => onPageChange(i + 1)}
+                className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${
+                  i + 1 === currentPage
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : i + 1 < currentPage
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section outline */}
+      {headings.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">This Page</p>
+          <nav className="space-y-0.5">
+            {headings.map((h) => (
+              <button
+                key={h.id}
+                onClick={() => scrollTo(h.id)}
+                className={`block w-full text-left text-sm rounded-md px-2.5 py-1.5 transition-colors leading-snug ${
+                  h.level === 3 ? 'pl-5 text-xs' : ''
+                } ${
+                  activeId === h.id
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+                title={h.text}
+              >
+                <span className="line-clamp-2">{h.text}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      )}
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop sidebar — hidden below lg */}
+      <aside className="hidden lg:block">
+        <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pr-2 pb-8">
+          <p className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <List className="h-4 w-4" /> Lesson Outline
+          </p>
+          {sidebarContent}
+        </div>
+      </aside>
+
+      {/* Mobile toggle button — visible below lg */}
+      <div className="lg:hidden fixed bottom-20 left-4 z-40">
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="flex items-center gap-1.5 bg-white border border-gray-300 shadow-lg rounded-full px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          aria-label="Toggle lesson outline"
+        >
+          {mobileOpen ? <XIcon className="h-4 w-4" /> : <List className="h-4 w-4" />}
+          <span>{mobileOpen ? 'Close' : 'Outline'}</span>
+        </button>
+      </div>
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-30" onClick={() => setMobileOpen(false)}>
+          <div className="absolute inset-0 bg-black/20" />
+          <div
+            className="absolute left-0 bottom-0 w-72 max-h-[70vh] bg-white rounded-tr-2xl shadow-2xl border-t border-r border-gray-200 overflow-y-auto p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <List className="h-4 w-4" /> Lesson Outline
+              </p>
+              <button onClick={() => setMobileOpen(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                <XIcon className="h-4 w-4" />
+              </button>
+            </div>
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
 
 // Enhanced CoachingResponse with narrative content and fallback info
 interface GraduatedExample {
@@ -637,19 +820,23 @@ function renderMarkdown(markdown: string): React.ReactNode {
       continue
     }
 
-    // Headers
+    // Headers — each gets an id for sidebar anchor links
     if (line.startsWith('#### ')) {
       flushList()
-      elements.push(<h4 key={i} className="text-[19px] font-semibold text-gray-900 mt-8 mb-4">{formatInline(line.slice(5))}</h4>)
+      const text = line.slice(5)
+      elements.push(<h4 key={i} id={slugify(text)} className="text-[19px] font-semibold text-gray-900 mt-8 mb-4 scroll-mt-20">{formatInline(text)}</h4>)
     } else if (line.startsWith('### ')) {
       flushList()
-      elements.push(<h3 key={i} className="text-[22px] font-bold text-gray-900 mt-10 mb-5">{formatInline(line.slice(4))}</h3>)
+      const text = line.slice(4)
+      elements.push(<h3 key={i} id={slugify(text)} className="text-[22px] font-bold text-gray-900 mt-10 mb-5 scroll-mt-20">{formatInline(text)}</h3>)
     } else if (line.startsWith('## ')) {
       flushList()
-      elements.push(<h2 key={i} className="text-[28px] font-extrabold text-gray-900 mt-14 mb-6 pb-3 border-b-2 border-gray-200">{formatInline(line.slice(3))}</h2>)
+      const text = line.slice(3)
+      elements.push(<h2 key={i} id={slugify(text)} className="text-[28px] font-extrabold text-gray-900 mt-14 mb-6 pb-3 border-b-2 border-gray-200 scroll-mt-20">{formatInline(text)}</h2>)
     } else if (line.startsWith('# ')) {
       flushList()
-      elements.push(<h1 key={i} className="text-4xl font-extrabold text-gray-900 mt-8 mb-8">{formatInline(line.slice(2))}</h1>)
+      const text = line.slice(2)
+      elements.push(<h1 key={i} id={slugify(text)} className="text-4xl font-extrabold text-gray-900 mt-8 mb-8 scroll-mt-20">{formatInline(text)}</h1>)
     }
     // Unordered list
     else if (line.match(/^[-*]\s+/)) {
@@ -1181,6 +1368,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
               const pages = paginateContent(coaching.narrativeContent)
               const totalPages = pages.length
               const showPagination = totalPages > 1
+              const currentPageMarkdown = pages[currentPage - 1] || ''
+              const pageHeadings = extractHeadings(currentPageMarkdown)
               
               return (
                 <div ref={lessonTopRef}>
@@ -1235,9 +1424,20 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
                     </div>
                   )}
 
-                  {/* Lesson content — no Card wrapper, full width */}
-                  <div className="prose-lesson max-w-none mt-6">
-                    {renderMarkdown(pages[currentPage - 1] || '')}
+                  {/* Two-column layout: content + sidebar */}
+                  <div className="lg:grid lg:grid-cols-[1fr_260px] lg:gap-8 mt-6">
+                    {/* Lesson content — no Card wrapper, full width */}
+                    <div className="prose-lesson max-w-none min-w-0">
+                      {renderMarkdown(currentPageMarkdown)}
+                    </div>
+
+                    {/* Sidebar outline */}
+                    <LessonSidebar
+                      headings={pageHeadings}
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
                   </div>
                     
                   {/* Pagination Navigation */}
