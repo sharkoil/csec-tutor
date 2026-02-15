@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Navbar } from '@/components/navbar'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Loader2, Plus, BookOpen, Play, Award, Zap, Clock, TrendingUp, ArrowRight, CheckCircle, Flame, Target, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
+import { Loader2, Plus, BookOpen, Play, Award, Zap, Clock, TrendingUp, ArrowRight, CheckCircle, Flame, Target, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Sparkles, MoreHorizontal, X } from 'lucide-react'
 import { fetchPlans as fetchPlansFromStorage, fetchProgress as fetchProgressFromStorage } from '@/lib/plan-storage'
 import { StudyPlan, Progress as ProgressData, DashboardSummary, StudentStreak, StudentMetric } from '@/types'
 
@@ -23,6 +23,16 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [streak, setStreak] = useState<StudentStreak | null>(null)
   const [atRiskTopics, setAtRiskTopics] = useState<StudentMetric[]>([])
+  const [menuOpen, setMenuOpen] = useState<string | null>(null) // planId_topic key
+  const [generating, setGenerating] = useState<Record<string, 'pending' | 'done' | 'error'>>({}) // planId_topic → status
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = () => setMenuOpen(null)
+    window.addEventListener('click', handler)
+    return () => window.removeEventListener('click', handler)
+  }, [menuOpen])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -46,7 +56,7 @@ export default function Dashboard() {
       const progressMap: Record<string, ProgressData[]> = {}
       await Promise.all(
         plans.map(async (plan) => {
-          expanded[plan.id] = true
+          expanded[plan.id] = false // not-started section collapsed by default
           try {
             const prog = await fetchProgressFromStorage(user!.id, plan.id, plan.topics)
             progressMap[plan.id] = prog
@@ -107,6 +117,12 @@ export default function Dashboard() {
     return prog.find(p => p.topic === topic) || null
   }
 
+  /** Whether a topic has any content generated (at least coaching) */
+  const hasStarted = (planId: string, topic: string): boolean => {
+    const prog = getTopicProgress(planId, topic)
+    return !!(prog && (prog.coaching_completed || prog.practice_completed || prog.exam_completed))
+  }
+
   /** Return the best direct link for a topic based on its progress */
   const getTopicLink = (planId: string, topic: string): string => {
     const base = `/plans/${planId}/topics/${encodeURIComponent(topic)}`
@@ -121,23 +137,47 @@ export default function Dashboard() {
   /** Return a label + icon for the topic's current state */
   const getTopicState = (planId: string, topic: string) => {
     const prog = getTopicProgress(planId, topic)
-    if (!prog || (!prog.coaching_completed && !prog.practice_completed && !prog.exam_completed)) {
-      return { label: 'Start', icon: Sparkles, color: 'text-primary', bg: 'bg-primary/10' }
-    }
-    if (prog.exam_completed) {
+    if (prog?.exam_completed) {
       return { label: `${prog.exam_score ?? 0}%`, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' }
     }
-    if (prog.practice_completed) {
+    if (prog?.practice_completed) {
       return { label: 'Exam', icon: Award, color: 'text-amber-600', bg: 'bg-amber-50' }
     }
-    if (prog.coaching_completed) {
+    if (prog?.coaching_completed) {
       return { label: 'Practice', icon: Play, color: 'text-blue-600', bg: 'bg-blue-50' }
     }
-    return { label: 'Start', icon: Sparkles, color: 'text-primary', bg: 'bg-primary/10' }
+    return { label: 'Not started', icon: Sparkles, color: 'text-muted-foreground', bg: 'bg-muted' }
   }
 
   const toggleExpanded = (planId: string) => {
     setExpandedPlans(prev => ({ ...prev, [planId]: !prev[planId] }))
+  }
+
+  const menuKey = (planId: string, topic: string) => `${planId}_${topic}`
+
+  /** Fire-and-forget: generate a lesson in the background */
+  const generateInBackground = async (plan: StudyPlan, topic: string) => {
+    const key = menuKey(plan.id, topic)
+    setMenuOpen(null)
+    setGenerating(prev => ({ ...prev, [key]: 'pending' }))
+    try {
+      const res = await fetch('/api/ai/coaching', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(user?.id ? { 'x-user-id': user.id } : {}) },
+        body: JSON.stringify({
+          subject: plan.subject,
+          topic,
+          userLevel: 'intermediate',
+          userId: user?.id,
+          planId: plan.id,
+          wizardData: plan.wizard_data || undefined,
+        }),
+      })
+      if (!res.ok) throw new Error('Generation failed')
+      setGenerating(prev => ({ ...prev, [key]: 'done' }))
+    } catch {
+      setGenerating(prev => ({ ...prev, [key]: 'error' }))
+    }
   }
 
   return (
@@ -348,82 +388,170 @@ export default function Dashboard() {
                     </CardHeader>
 
                     <CardContent>
-                      {/* Expand/Collapse Toggle */}
-                      <button
-                        onClick={() => toggleExpanded(plan.id)}
-                        className="flex items-center justify-between w-full text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-                      >
-                        <span>{plan.topics?.length || 0} Topics</span>
-                        {expandedPlans[plan.id] ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                      </button>
+                      {/* ── Started Topics (direct links) ── */}
+                      {(() => {
+                        const startedTopics = (plan.topics || []).filter(t => hasStarted(plan.id, t))
+                        const notStartedTopics = (plan.topics || []).filter(t => !hasStarted(plan.id, t))
 
-                      {/* Topic Links */}
-                      {expandedPlans[plan.id] && (
-                        <div className="space-y-2 mb-6">
-                          {plan.topics?.map((topic, index) => {
-                            const state = getTopicState(plan.id, topic)
-                            const StateIcon = state.icon
-                            const prog = getTopicProgress(plan.id, topic)
-                            const stepsComplete = prog
-                              ? [prog.coaching_completed, prog.practice_completed, prog.exam_completed].filter(Boolean).length
-                              : 0
+                        return (
+                          <>
+                            {startedTopics.length > 0 && (
+                              <div className="mb-4">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Continue</p>
+                                <div className="space-y-1.5">
+                                  {startedTopics.map((topic, index) => {
+                                    const state = getTopicState(plan.id, topic)
+                                    const StateIcon = state.icon
+                                    const prog = getTopicProgress(plan.id, topic)
 
-                            return (
-                              <Link
-                                key={index}
-                                href={getTopicLink(plan.id, topic)}
-                                className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors group/topic"
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className={`flex items-center justify-center h-7 w-7 rounded-full ${state.bg} shrink-0`}>
-                                    <StateIcon className={`h-3.5 w-3.5 ${state.color}`} />
-                                  </div>
-                                  <span className="text-sm font-medium text-foreground truncate group-hover/topic:text-primary transition-colors">
-                                    {topic}
-                                  </span>
+                                    return (
+                                      <Link
+                                        key={index}
+                                        href={getTopicLink(plan.id, topic)}
+                                        className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors group/topic"
+                                      >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                          <div className={`flex items-center justify-center h-7 w-7 rounded-full ${state.bg} shrink-0`}>
+                                            <StateIcon className={`h-3.5 w-3.5 ${state.color}`} />
+                                          </div>
+                                          <span className="text-sm font-medium text-foreground truncate group-hover/topic:text-primary transition-colors">
+                                            {topic}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <div className="flex gap-1">
+                                            <div className={`h-1.5 w-1.5 rounded-full ${prog?.coaching_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Coaching" />
+                                            <div className={`h-1.5 w-1.5 rounded-full ${prog?.practice_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Practice" />
+                                            <div className={`h-1.5 w-1.5 rounded-full ${prog?.exam_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Exam" />
+                                          </div>
+                                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover/topic:text-primary group-hover/topic:translate-x-0.5 transition-all" />
+                                        </div>
+                                      </Link>
+                                    )
+                                  })}
                                 </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {/* Mini step dots */}
-                                  <div className="flex gap-1">
-                                    <div className={`h-1.5 w-1.5 rounded-full ${prog?.coaching_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Coaching" />
-                                    <div className={`h-1.5 w-1.5 rounded-full ${prog?.practice_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Practice" />
-                                    <div className={`h-1.5 w-1.5 rounded-full ${prog?.exam_completed ? 'bg-green-500' : 'bg-gray-300'}`} title="Exam" />
-                                  </div>
-                                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover/topic:text-primary group-hover/topic:translate-x-0.5 transition-all" />
-                                </div>
-                              </Link>
-                            )
-                          })}
-                        </div>
-                      )}
-
-                      {/* Collapsed topic badges */}
-                      {!expandedPlans[plan.id] && (
-                        <div className="mb-6">
-                          <div className="flex flex-wrap gap-2">
-                            {plan.topics?.slice(0, 3).map((topic, index) => (
-                              <Link key={index} href={getTopicLink(plan.id, topic)}>
-                                <Badge variant="outline" className="text-xs hover:bg-primary/10 hover:border-primary/30 cursor-pointer transition-colors">
-                                  {topic}
-                                </Badge>
-                              </Link>
-                            ))}
-                            {plan.topics && plan.topics.length > 3 && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs text-muted-foreground cursor-pointer hover:text-foreground"
-                                onClick={(e) => { e.preventDefault(); toggleExpanded(plan.id) }}
-                              >
-                                +{plan.topics.length - 3} more
-                              </Badge>
+                              </div>
                             )}
-                          </div>
-                        </div>
-                      )}
+
+                            {/* ── Not-started Topics (with ellipsis menu) ── */}
+                            {notStartedTopics.length > 0 && (
+                              <div className="mb-4">
+                                <button
+                                  onClick={() => toggleExpanded(plan.id)}
+                                  className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
+                                >
+                                  <span>Not Started ({notStartedTopics.length})</span>
+                                  {expandedPlans[plan.id] ? (
+                                    <ChevronUp className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+
+                                {expandedPlans[plan.id] && (
+                                  <div className="space-y-1.5">
+                                    {notStartedTopics.map((topic, index) => {
+                                      const key = menuKey(plan.id, topic)
+                                      const genStatus = generating[key]
+
+                                      return (
+                                        <div
+                                          key={index}
+                                          className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 relative"
+                                        >
+                                          <div className="flex items-center gap-3 min-w-0">
+                                            <div className="flex items-center justify-center h-7 w-7 rounded-full bg-muted shrink-0">
+                                              <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                                            </div>
+                                            <span className="text-sm text-muted-foreground truncate">
+                                              {topic}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 shrink-0">
+                                            {genStatus === 'pending' && (
+                                              <span className="flex items-center gap-1 text-xs text-primary">
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                Generating…
+                                              </span>
+                                            )}
+                                            {genStatus === 'done' && (
+                                              <Link href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/coaching`}>
+                                                <Badge variant="secondary" className="text-xs cursor-pointer hover:bg-primary/10">
+                                                  <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
+                                                  Ready
+                                                </Badge>
+                                              </Link>
+                                            )}
+                                            {genStatus === 'error' && (
+                                              <span className="text-xs text-red-500">Failed</span>
+                                            )}
+                                            {!genStatus && (
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === key ? null : key) }}
+                                                className="p-1 rounded hover:bg-muted transition-colors"
+                                                title="Topic actions"
+                                              >
+                                                <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                                              </button>
+                                            )}
+
+                                            {/* Dropdown menu */}
+                                            {menuOpen === key && (
+                                              <div className="absolute right-2 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[180px]">
+                                                <button
+                                                  onClick={() => generateInBackground(plan, topic)}
+                                                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                                                >
+                                                  <Sparkles className="h-4 w-4 text-primary" />
+                                                  Generate Lesson
+                                                </button>
+                                                <Link
+                                                  href={`/plans/${plan.id}/topics/${encodeURIComponent(topic)}/coaching`}
+                                                  onClick={() => setMenuOpen(null)}
+                                                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                                                >
+                                                  <BookOpen className="h-4 w-4 text-blue-600" />
+                                                  Go to Topic
+                                                </Link>
+                                                <button
+                                                  onClick={() => setMenuOpen(null)}
+                                                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                                                >
+                                                  <X className="h-4 w-4" />
+                                                  Cancel
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+
+                                {!expandedPlans[plan.id] && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {notStartedTopics.slice(0, 4).map((topic, index) => (
+                                      <Badge key={index} variant="outline" className="text-xs text-muted-foreground">
+                                        {topic}
+                                      </Badge>
+                                    ))}
+                                    {notStartedTopics.length > 4 && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs text-muted-foreground cursor-pointer hover:text-foreground"
+                                        onClick={() => toggleExpanded(plan.id)}
+                                      >
+                                        +{notStartedTopics.length - 4} more
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
 
                       {/* Progress */}
                       <div className="mb-6">
