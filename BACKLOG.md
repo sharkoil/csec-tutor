@@ -83,24 +83,48 @@
 - **Integration:** Added to `coaching/page.tsx` — only renders when lesson is loaded
 - **Commit:** `78debdf`
 
+### ✅ Task 2: Two-column layout on desktop (P0)
+- **Changes:**
+  - `slugify()` helper + `extractHeadings()` utility for anchor IDs
+  - `LessonSidebar` component with IntersectionObserver for active heading
+  - Desktop: sticky sidebar (260px) in `lg:grid-cols-[1fr_260px]` grid
+  - Mobile: floating "Outline" pill → slide-up drawer
+  - Page number buttons for multi-page navigation
+- **File:** `app/plans/[id]/topics/[topic]/coaching/page.tsx`
+- **Commit:** `9323cab`
+
+### ✅ Task 20: Study Calendar with Week-by-Week Schedule
+- **Changes:**
+  - `lib/study-schedule.ts`: scheduling algorithm using wizard data
+    - Topological sort by prerequisite graph
+    - Depth tiers (foundational/standard/intensive) from confidence + target grade
+    - Time budgeting: study_days_per_week × study_minutes_per_session
+    - Exam date resolution (May/June, January CSEC sittings)
+    - Revision weeks (10-15% of total) for weak topics
+  - `components/study-calendar.tsx`: accordion timeline UI
+    - Summary strip, timeline dots, expandable week cards, exam countdown
+  - `app/plans/[id]/page.tsx`: Calendar/Topics tab toggle
+- **Commits:** `69c0ab1`
+
+### ✅ Task 21: Metrics Tables Migration
+- **Changes:**
+  - `database/add-metrics-tables.sql`: Creates `student_metrics`, `daily_activity`, `quiz_results` tables + `student_dashboard_summary` view
+  - Unlocks the entire `/api/metrics` analytics pipeline in `lib/metrics.ts`
+  - Permissive RLS policies, proper indexes, updated_at trigger
+
+### ✅ Task 11: Make quiz questions interactive (P3)
+- **Changes:**
+  - `components/interactive-mcq.tsx`: Standalone interactive MCQ component
+    - Click-to-answer with instant green/red feedback
+    - Correct answer extracted from answer section
+    - Auto-reveals explanation after selection
+    - Locks after first selection (no re-picks)
+    - Option state: hover → selected correct (green) / incorrect (red + strikethrough)
+  - Integrated into `coaching/page.tsx` `flushBlockquote` — MCQ blockquotes now use `InteractiveMCQ` instead of generic cards
+
 ---
 
 ## Remaining — Not Started
-
-### Task 2: Two-column layout on desktop (P0)
-- Add sticky sidebar at `lg:` breakpoint (~35% width) with:
-  - Lesson outline (auto-generated from h2/h3 headings)
-  - Progress indicator
-  - Key terms glossary
-- Collapse to accordion on mobile
-- **Effort:** 2-3 hours
-
-### Task 11: Make quiz questions interactive (P3)
-- Add `onClick` handlers to MCQ options
-- Track selected answer in state
-- Show green/red feedback with explanation
-- POST to `/api/metrics` type `quiz` → populate `quiz_results`
-- **Effort:** 2-3 hours
 
 ### Task 12: "Key Takeaway" summary cards (P3)
 - Instruct AI prompt to insert `> 📌 **Key Takeaway:** ...` after every 2-3 paragraphs
@@ -122,11 +146,11 @@
 | Priority | Total | Done | Remaining |
 |----------|-------|------|-----------|
 | BUG      | 1     | 1    | 0         |
-| P0       | 3     | 2    | 1         |
+| P0       | 3     | 3    | 0         |
 | P1       | 4     | 4    | 0         |
 | P2       | 3     | 3    | 0         |
-| P3       | 3     | 1    | 2         |
+| P3       | 3     | 2    | 1         |
 | P4 (Prompt) | 4  | 4    | 0         |
 | P5       | 2     | 0    | 2         |
-| New      | 1     | 1    | 0         |
-| **Total**| **21**| **16** | **5**  |
+| New      | 4     | 4    | 0         |
+| **Total**| **24**| **21** | **3**  |

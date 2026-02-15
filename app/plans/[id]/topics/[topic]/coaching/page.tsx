@@ -10,6 +10,7 @@ import { Loader2, ArrowLeft, BookOpen, Lightbulb, Target, CheckCircle, Graduatio
 import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } from '@/lib/plan-storage'
 import { renderMathInText, containsMath } from '@/components/math-renderer'
 import LessonChat from '@/components/lesson-chat'
+import InteractiveMCQ from '@/components/interactive-mcq'
 
 // ─── Heading utilities ────────────────────────────────────────────────────────
 
@@ -567,8 +568,35 @@ function renderMarkdown(markdown: string): React.ReactNode {
           ))}
         </blockquote>
       )
+    } else if (type === 'mcq') {
+      // Interactive MCQ — clickable options with instant feedback
+      // Split into question lines (before answer) and answer lines
+      let answerStart = -1
+      for (let j = 0; j < strippedLines.length; j++) {
+        const ln = strippedLines[j]
+        if (
+          ln.match(/^✅\s*\*\*Answer:?\*\*/i) ||
+          ln.match(/^📝\s*\*/) ||
+          ln.match(/^📋\s*\*\*Answer Key:?\*\*/i)
+        ) {
+          answerStart = (j > 0 && strippedLines[j - 1].match(/^[-*_]{3,}$/)) ? j - 1 : j
+          break
+        }
+      }
+      const mcqQuestionLines = answerStart >= 0 ? strippedLines.slice(0, answerStart) : strippedLines
+      const mcqAnswerLines = answerStart >= 0 ? strippedLines.slice(answerStart) : []
+
+      elements.push(
+        <InteractiveMCQ
+          key={`mcq-${elements.length}`}
+          questionLines={mcqQuestionLines}
+          answerLines={mcqAnswerLines}
+          theme={theme}
+          formatInline={formatInline}
+        />
+      )
     } else {
-      // Styled question card
+      // Styled question card (non-MCQ)
       elements.push(
         <div key={`card-${elements.length}`} className={`lesson-question-card ${theme.bg} border-2 ${theme.border} rounded-xl my-6 overflow-hidden shadow-sm`}>
           {/* Card type badge */}
