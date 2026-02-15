@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, CheckCircle, RotateCcw, Award, FileText, Clock } from 'lucide-react'
+import StudyTipsSlider from '@/components/study-tips-slider'
 import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } from '@/lib/plan-storage'
 
 interface ExamQuestion {
@@ -351,6 +352,8 @@ export default function ExamPage({ params }: { params: Promise<{ id: string; top
               <p className="text-gray-600">
                 Creating a comprehensive exam based on CSEC curriculum and past papers...
               </p>
+
+              <StudyTipsSlider />
             </CardContent>
           </Card>
         )}

@@ -11,6 +11,7 @@ import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } f
 import { renderMathInText, containsMath } from '@/components/math-renderer'
 import LessonChat from '@/components/lesson-chat'
 import InteractiveMCQ from '@/components/interactive-mcq'
+import StudyTipsSlider from '@/components/study-tips-slider'
 
 // ─── Heading utilities ────────────────────────────────────────────────────────
 
@@ -1369,6 +1370,8 @@ export default function CoachingPage({ params }: { params: Promise<{ id: string;
                 <p className="text-gray-500 text-sm mt-6">
                   This usually takes 30-60 seconds for a complete lesson
                 </p>
+
+                <StudyTipsSlider />
               </div>
             </CardContent>
           </Card>

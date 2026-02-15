@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, CheckCircle, Play, RotateCcw } from 'lucide-react'
+import StudyTipsSlider from '@/components/study-tips-slider'
 import { fetchPlan as fetchPlanFromStorage, fetchTopicProgress, saveProgress } from '@/lib/plan-storage'
 
 interface PracticeQuestion {
@@ -305,6 +306,8 @@ export default function PracticePage({ params }: { params: Promise<{ id: string;
               <p className="text-gray-600">
                 Creating questions based on CSEC curriculum and past papers...
               </p>
+
+              <StudyTipsSlider />
             </CardContent>
           </Card>
         )}
