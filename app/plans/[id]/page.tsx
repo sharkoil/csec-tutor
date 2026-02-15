@@ -19,7 +19,7 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
   const [plan, setPlan] = useState<StudyPlan | null>(null)
   const [progress, setProgress] = useState<Progress[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [view, setView] = useState<'calendar' | 'topics'>('calendar')
+  const [view, setView] = useState<'calendar' | 'topics'>('topics')
 
   useEffect(() => {
     if (!loading && !user) {
@@ -132,9 +132,34 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">{plan.subject}</h2>
-              <p className="text-gray-600 mb-4">
-                {plan.topics.length} topics in your study plan
+              <p className="text-gray-600 mb-1">
+                {plan.topics.length} topic{plan.topics.length !== 1 ? 's' : ''} in your study plan
               </p>
+              {/* Plan summary from wizard data */}
+              {plan.wizard_data && (
+                <div className="flex flex-wrap gap-2 mt-2 mb-3">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                    🎯 {plan.wizard_data.target_grade === 'grade_1' ? 'Grade I' : plan.wizard_data.target_grade === 'grade_2' ? 'Grade II' : 'Grade III'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {plan.wizard_data.proficiency_level === 'beginner' ? '🌱 Beginner' : plan.wizard_data.proficiency_level === 'intermediate' ? '📗 Intermediate' : '🚀 Advanced'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                    {plan.wizard_data.learning_style === 'theory_first' ? '📖 Theory First' : plan.wizard_data.learning_style === 'practice_first' ? '✏️ Practice First' : '🔄 Blended'}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                    ⏱️ {plan.wizard_data.study_minutes_per_session} min sessions
+                  </span>
+                  {plan.wizard_data.exam_timeline !== 'no_exam' && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+                      📅 {plan.wizard_data.exam_timeline === 'may_june' ? 'May/June 2026' : 'January 2027'}
+                    </span>
+                  )}
+                </div>
+              )}
+              {plan.description && (
+                <p className="text-sm text-gray-500 italic mb-2">{plan.description}</p>
+              )}
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-600">{getOverallProgress()}%</div>
@@ -142,12 +167,38 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
             </div>
           </div>
           
+          {/* Progress bar */}
           <div className="w-full bg-gray-200 rounded-full h-3">
             <div
               className="bg-blue-600 h-3 rounded-full transition-all duration-300"
               style={{ width: `${getOverallProgress()}%` }}
             ></div>
           </div>
+
+          {/* Progress breakdown */}
+          {(() => {
+            const coachingDone = progress.filter(p => p.coaching_completed).length
+            const practiceDone = progress.filter(p => p.practice_completed).length
+            const examDone = progress.filter(p => p.exam_completed).length
+            const total = plan.topics.length
+            const avgPractice = progress.filter(p => p.practice_score != null)
+            const avgExam = progress.filter(p => p.exam_score != null)
+            return (
+              <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-gray-500">
+                <span>📘 Lessons: <strong className="text-gray-700">{coachingDone}/{total}</strong></span>
+                <span>📝 Practice: <strong className="text-gray-700">{practiceDone}/{total}</strong>
+                  {avgPractice.length > 0 && (
+                    <> (avg {Math.round(avgPractice.reduce((s, p) => s + (p.practice_score || 0), 0) / avgPractice.length)}%)</>
+                  )}
+                </span>
+                <span>🏆 Exams: <strong className="text-gray-700">{examDone}/{total}</strong>
+                  {avgExam.length > 0 && (
+                    <> (avg {Math.round(avgExam.reduce((s, p) => s + (p.exam_score || 0), 0) / avgExam.length)}%)</>
+                  )}
+                </span>
+              </div>
+            )
+          })()}
         </div>
 
         {/* View Toggle */}
