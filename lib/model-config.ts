@@ -1,27 +1,50 @@
 /**
- * Model Configuration with Tiered Selection and Free Fallback
+ * Model Configuration v2 — Tiered Selection with Cost Optimization
  * 
- * Uses GPT-5.2 for quality-critical tasks (lessons, diagnostics)
- * Uses GPT-3.5 Turbo for utility tasks (study guides, checkpoints)
- * Falls back to free model when credits are exhausted
+ * v2 Cost Optimization Strategy:
+ * - GENERATION: GPT-4.1-mini for lesson content (80% cost reduction vs GPT-5.2)
+ * - GENERATION_HQ: GPT-4.1 for quality-flagged regeneration
+ * - STRUCTURED: GPT-4o-mini for quizzes, exams, classification (90% cost reduction)
+ * - CONVERSATIONAL: GPT-4o-mini for chat Q&A, study guides
+ * - FREE_FALLBACK: Llama 3.3 70B when credits are exhausted
+ * - Daily cost circuit breaker: forces free model when daily spend exceeds budget
  */
 
+import { checkDailyBudget } from './usage-tracking'
+
 export const MODELS = {
-  // Primary model for deep lesson content and diagnostics
-  // Using OpenAI GPT-5.2 (latest flagship model)
-  LESSON: 'openai/gpt-5.2',
+  // Primary model for lesson content generation (workhorse)
+  LESSON: 'openai/gpt-4.1-mini',
   
-  // Cheaper model for utility tasks (study guides, key points, checkpoints)
-  UTILITY: 'openai/gpt-3.5-turbo',
+  // High-quality fallback for flagged/regenerated content
+  LESSON_HQ: 'openai/gpt-4.1',
+  
+  // Structured output tasks: quizzes, exams, plan analysis, classification
+  STRUCTURED: 'openai/gpt-4o-mini',
+  
+  // Conversational: chat Q&A, study guides  
+  UTILITY: 'openai/gpt-4o-mini',
   
   // Free fallback when paid credits are exhausted
-  FREE_FALLBACK: 'meta-llama/llama-3.1-8b-instruct:free',
+  FREE_FALLBACK: 'meta-llama/llama-3.3-70b-instruct:free',
   
   // Minimum credit threshold before switching to free (in dollars)
   CREDIT_THRESHOLD: 0.10
 } as const
 
-export type ModelTier = 'lesson' | 'utility' | 'analysis'
+/** Token budgets per task type to prevent runaway costs */
+export const TOKEN_BUDGETS = {
+  lesson:        { input: 2500, output: 6000 },
+  practice:      { input: 1200, output: 2000 },
+  exam:          { input: 1500, output: 4000 },
+  chat:          { input: 2000, output: 600  },
+  study_guide:   { input: 1000, output: 1500 },
+  plan_analysis: { input: 2000, output: 800  },
+} as const
+
+export type TaskType = keyof typeof TOKEN_BUDGETS
+
+export type ModelTier = 'lesson' | 'lesson_hq' | 'structured' | 'utility' | 'analysis'
 
 // Cache the credit check for 5 minutes to avoid excessive API calls
 let cachedCredits: { remaining: number; checkedAt: number } | null = null
@@ -61,10 +84,21 @@ export async function getOpenRouterCredits(): Promise<{ total: number; used: num
 }
 
 /**
- * Check if we have sufficient credits, with caching
+ * Check if we have sufficient credits AND are within daily budget, with caching
  */
 async function hasSufficientCredits(): Promise<boolean> {
   const now = Date.now()
+  
+  // Check daily cost circuit breaker first
+  try {
+    const budget = await checkDailyBudget()
+    if (!budget.allowed) {
+      console.warn('[hasSufficientCredits] Daily cost budget exceeded — forcing free model')
+      return false
+    }
+  } catch {
+    // If budget check fails, continue with credit check
+  }
   
   // Use cached value if still valid
   if (cachedCredits && (now - cachedCredits.checkedAt) < CACHE_TTL_MS) {
@@ -103,10 +137,16 @@ export async function getModelForTask(tier: ModelTier): Promise<{ model: string;
   
   switch (tier) {
     case 'lesson':
-    case 'analysis':
-      console.log('[getModelForTask] Selecting LESSON tier model:', MODELS.LESSON)
+      console.log('[getModelForTask] Selecting GENERATION tier model:', MODELS.LESSON)
       return { model: MODELS.LESSON, isFallback: false }
+    case 'lesson_hq':
+      console.log('[getModelForTask] Selecting GENERATION_HQ tier model:', MODELS.LESSON_HQ)
+      return { model: MODELS.LESSON_HQ, isFallback: false }
+    case 'structured':
+      console.log('[getModelForTask] Selecting STRUCTURED tier model:', MODELS.STRUCTURED)
+      return { model: MODELS.STRUCTURED, isFallback: false }
     case 'utility':
+    case 'analysis':
       console.log('[getModelForTask] Selecting UTILITY tier model:', MODELS.UTILITY)
       return { model: MODELS.UTILITY, isFallback: false }
     default:

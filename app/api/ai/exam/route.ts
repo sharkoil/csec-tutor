@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { callWithFallback, TOKEN_BUDGETS } from '@/lib/model-config'
+import { trackUsage, extractUsageFromResponse } from '@/lib/usage-tracking'
 
 function getOpenAIClient() {
   return new OpenAI({
@@ -69,14 +71,21 @@ REQUIREMENTS:
 - Include Caribbean context where appropriate
 - Respond ONLY with the JSON object, no other text`
 
-    const response = await openai.chat.completions.create({
-      model: 'anthropic/claude-3.5-sonnet',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Generate a ${duration}-minute CSEC practice exam for ${subject} covering ${topics.join(', ')}. Respond ONLY with valid JSON.` }
-      ],
-      temperature: 0.5,
-    })
+    const { result: response, model: usedModel, isFallback } = await callWithFallback(
+      async (model) => openai.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Generate a ${duration}-minute CSEC practice exam for ${subject} covering ${topics.join(', ')}. Respond ONLY with valid JSON.` }
+        ],
+        temperature: 0.5,
+        max_tokens: TOKEN_BUDGETS.exam.output,
+      }),
+      'structured'
+    )
+
+    // Track usage (fire-and-forget)
+    trackUsage(extractUsageFromResponse(response, 'exam', usedModel, subject, topics.join(', '))).catch(() => {})
 
     const content = response.choices[0].message.content || ''
     

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { CSEC_SUBJECTS } from '@/data/subjects'
+import { callWithFallback, TOKEN_BUDGETS } from '@/lib/model-config'
+import { trackUsage, extractUsageFromResponse } from '@/lib/usage-tracking'
 
 function getOpenAIClient() {
   return new OpenAI({
@@ -127,12 +129,18 @@ Rules:
       content: userContent
     })
 
-    const response = await openai.chat.completions.create({
-      model: 'anthropic/claude-3.5-sonnet',
-      messages,
-      temperature: 0.3,
-      max_tokens: 1000
-    })
+    const { result: response, model: usedModel } = await callWithFallback(
+      async (model) => openai.chat.completions.create({
+        model,
+        messages,
+        temperature: 0.3,
+        max_tokens: TOKEN_BUDGETS.plan_analysis.output,
+      }),
+      'structured'
+    )
+
+    // Track usage (fire-and-forget)
+    trackUsage(extractUsageFromResponse(response, 'analyze-plan', usedModel)).catch(() => {})
 
     const content = response.choices[0].message.content || ''
 

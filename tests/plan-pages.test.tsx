@@ -92,6 +92,11 @@ jest.mock('@/data/subjects', () => ({
   },
   TOPIC_PREREQUISITES: {},
   TOPIC_SUBTOPICS: {},
+  LEARNING_STAGES: {
+    fundamentals: { estimated_time: 45 },
+    practice: { estimated_time: 30 },
+    exam: { estimated_time: 60 },
+  },
   getPrerequisites: jest.fn().mockReturnValue([]),
   getSubtopics: jest.fn().mockReturnValue([]),
 }))

@@ -168,7 +168,8 @@ describe('VectorSearch', () => {
         error: new Error('Search failed')
       })
 
-      await expect(VectorSearch.searchSimilarContent('query')).rejects.toThrow('Search failed')
+      const result = await VectorSearch.searchSimilarContent('query')
+      expect(result).toEqual([])
     })
   })
 

@@ -256,10 +256,15 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET endpoint to check credit status
+ * GET endpoint to check credit status.
+ * Protected by middleware — requires x-user-id header.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const userId = request.headers.get('x-user-id')
+    if (!userId) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
     const status = await AICoach.getCreditStatus()
     return NextResponse.json(status)
   } catch {

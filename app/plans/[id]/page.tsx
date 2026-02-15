@@ -154,17 +154,6 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
         {schedule && (
           <div className="flex items-center gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
             <button
-              onClick={() => setView('calendar')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                view === 'calendar'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <CalendarDays className="h-4 w-4" />
-              Study Calendar
-            </button>
-            <button
               onClick={() => setView('topics')}
               className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                 view === 'topics'
@@ -174,6 +163,17 @@ export default function PlanPage({ params }: { params: Promise<{ id: string }> }
             >
               <LayoutGrid className="h-4 w-4" />
               All Topics
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                view === 'calendar'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <CalendarDays className="h-4 w-4" />
+              Study Calendar
             </button>
           </div>
         )}

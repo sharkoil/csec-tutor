@@ -5,13 +5,16 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase credentials for tests')
-}
+const hasCredentials = !!(supabaseUrl && supabaseKey)
 
-const supabase = createClient(supabaseUrl, supabaseKey)
+// Only create client if credentials are available
+const supabase = hasCredentials
+  ? createClient(supabaseUrl!, supabaseKey!)
+  : (null as any)
 
-describe('Database Integration Tests', () => {
+const describeOrSkip = hasCredentials ? describe : describe.skip
+
+describeOrSkip('Database Integration Tests', () => {
   // Test connection to actual database
   it('should connect to Supabase database', async () => {
     // Basic connection test

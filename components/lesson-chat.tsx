@@ -52,7 +52,7 @@ export default function LessonChat({ subject, topic, userId, lessonExcerpt }: Le
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(userId ? { 'x-user-id': userId } : {}) },
         body: JSON.stringify({
           message: trimmed,
           subject,

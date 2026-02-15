@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 import { generateEmbedding } from '@/lib/embeddings'
+import { callWithFallback, TOKEN_BUDGETS } from '@/lib/model-config'
+import { trackUsage, extractUsageFromResponse } from '@/lib/usage-tracking'
 
 function getOpenAIClient() {
   return new OpenAI({
@@ -112,14 +114,21 @@ Requirements:
 - Use Caribbean context where appropriate
 - Provide clear, unambiguous correct answers`
 
-    const response = await openai.chat.completions.create({
-      model: 'anthropic/claude-3.5-sonnet',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Generate ${count} CSEC-style practice questions for ${topic} in ${subject}. Respond ONLY with valid JSON.` }
-      ],
-      temperature: 0.6,
-    })
+    const { result: response, model: usedModel, isFallback } = await callWithFallback(
+      async (model) => openai.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Generate ${count} CSEC-style practice questions for ${topic} in ${subject}. Respond ONLY with valid JSON.` }
+        ],
+        temperature: 0.6,
+        max_tokens: TOKEN_BUDGETS.practice.output,
+      }),
+      'structured'
+    )
+
+    // Track usage (fire-and-forget)
+    trackUsage(extractUsageFromResponse(response, 'practice', usedModel, subject, topic)).catch(() => {})
 
     const content = response.choices[0].message.content || ''
     

@@ -71,7 +71,7 @@ export async function recordLessonComplete(params: {
   const { userId, planId, subject, topic, timeSpentMinutes, isRetry } = params
 
   try {
-    // Upsert student_metrics row
+    // Fetch existing row for incremental calculation
     const { data: existing } = await supabase
       .from('student_metrics')
       .select('*')
@@ -105,29 +105,23 @@ export async function recordLessonComplete(params: {
       quiz_score_avg: prev.quiz_score_avg ?? 0,
     })
 
-    const row = {
-      user_id: userId,
-      plan_id: planId,
-      subject,
-      topic,
-      lessons_completed: lessonsCompleted,
-      lessons_total: lessonsTotal,
-      completion_pct: completionPct,
-      total_time_minutes: totalTime,
-      lesson_retry_count: retryCount,
-      last_activity_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...mastery,
-    }
-
-    if (existing) {
-      await supabase
-        .from('student_metrics')
-        .update(row)
-        .eq('id', existing.id)
-    } else {
-      await supabase.from('student_metrics').insert(row)
-    }
+    // Atomic upsert on UNIQUE(user_id, plan_id, topic)
+    await supabase
+      .from('student_metrics')
+      .upsert({
+        user_id: userId,
+        plan_id: planId,
+        subject,
+        topic,
+        lessons_completed: lessonsCompleted,
+        lessons_total: lessonsTotal,
+        completion_pct: completionPct,
+        total_time_minutes: totalTime,
+        lesson_retry_count: retryCount,
+        last_activity_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...mastery,
+      }, { onConflict: 'user_id,plan_id,topic' })
 
     // Also bump daily_activity
     await bumpDailyActivity(supabase, userId, { lessonsCompleted: 1, timeSpentMinutes, subject })
@@ -173,7 +167,7 @@ export async function recordQuizResult(params: {
       questions: questions ?? [],
     })
 
-    // Update student_metrics
+    // Update student_metrics via atomic upsert
     const { data: existing } = await supabase
       .from('student_metrics')
       .select('*')
@@ -199,29 +193,24 @@ export async function recordQuizResult(params: {
       quiz_score_avg: newAvg,
     })
 
-    const updates = {
-      quiz_score_avg: newAvg,
-      quiz_attempts: quizAttempts,
-      best_quiz_score: bestScore,
-      problems_attempted: problemsAttempted,
-      problems_correct: problemsCorrect,
-      score_trend: scoreTrend,
-      last_activity_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...mastery,
-    }
-
-    if (existing) {
-      await supabase.from('student_metrics').update(updates).eq('id', existing.id)
-    } else {
-      await supabase.from('student_metrics').insert({
+    // Atomic upsert on UNIQUE(user_id, plan_id, topic)
+    await supabase
+      .from('student_metrics')
+      .upsert({
         user_id: userId,
         plan_id: planId,
         subject,
         topic,
-        ...updates,
-      })
-    }
+        quiz_score_avg: newAvg,
+        quiz_attempts: quizAttempts,
+        best_quiz_score: bestScore,
+        problems_attempted: problemsAttempted,
+        problems_correct: problemsCorrect,
+        score_trend: scoreTrend,
+        last_activity_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        ...mastery,
+      }, { onConflict: 'user_id,plan_id,topic' })
 
     // Bump daily activity
     await bumpDailyActivity(supabase, userId, { quizzesTaken: 1, subject })
@@ -240,6 +229,7 @@ async function bumpDailyActivity(
   const today = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
 
   try {
+    // Fetch existing to merge subjects array
     const { data: existing } = await supabase
       .from('daily_activity')
       .select('*')
@@ -247,29 +237,20 @@ async function bumpDailyActivity(
       .eq('activity_date', today)
       .maybeSingle()
 
-    if (existing) {
-      const subjects = new Set<string>(existing.subjects_studied || [])
-      if (bump.subject) subjects.add(bump.subject)
+    const subjects = new Set<string>(existing?.subjects_studied || [])
+    if (bump.subject) subjects.add(bump.subject)
 
-      await supabase
-        .from('daily_activity')
-        .update({
-          lessons_completed: (existing.lessons_completed ?? 0) + (bump.lessonsCompleted ?? 0),
-          quizzes_taken: (existing.quizzes_taken ?? 0) + (bump.quizzesTaken ?? 0),
-          time_spent_minutes: (existing.time_spent_minutes ?? 0) + (bump.timeSpentMinutes ?? 0),
-          subjects_studied: Array.from(subjects),
-        })
-        .eq('id', existing.id)
-    } else {
-      await supabase.from('daily_activity').insert({
+    // Atomic upsert on UNIQUE(user_id, activity_date)
+    await supabase
+      .from('daily_activity')
+      .upsert({
         user_id: userId,
         activity_date: today,
-        lessons_completed: bump.lessonsCompleted ?? 0,
-        quizzes_taken: bump.quizzesTaken ?? 0,
-        time_spent_minutes: bump.timeSpentMinutes ?? 0,
-        subjects_studied: bump.subject ? [bump.subject] : [],
-      })
-    }
+        lessons_completed: (existing?.lessons_completed ?? 0) + (bump.lessonsCompleted ?? 0),
+        quizzes_taken: (existing?.quizzes_taken ?? 0) + (bump.quizzesTaken ?? 0),
+        time_spent_minutes: (existing?.time_spent_minutes ?? 0) + (bump.timeSpentMinutes ?? 0),
+        subjects_studied: Array.from(subjects),
+      }, { onConflict: 'user_id,activity_date' })
   } catch (err) {
     console.error('[metrics] bumpDailyActivity failed:', err)
   }

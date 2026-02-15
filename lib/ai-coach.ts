@@ -1,6 +1,6 @@
 import { VectorSearch } from './vector-search'
 import { trackUsage, extractUsageFromResponse } from './usage-tracking'
-import { MODELS, callWithFallback, getOpenRouterCredits } from './model-config'
+import { MODELS, TOKEN_BUDGETS, callWithFallback, getOpenRouterCredits } from './model-config'
 import OpenAI from 'openai'
 
 /**
@@ -51,168 +51,91 @@ function isWritingSubject(subject: string): boolean {
  * 
  * GOLDEN RULE: Every question MUST have an answer provided somewhere in the same section.
  */
-const QUESTION_FORMAT_LIBRARY = `
-## 📐 QUESTION FORMAT LIBRARY (YOU MUST USE THESE EXACT FORMATS)
 
-NEVER present a question without its answer. This is an absolute rule.
-Select the correct format from the library below based on question type.
-Use the EXACT Markdown patterns shown — the rendering engine depends on them.
-
----
-
-### FORMAT A: Multiple Choice (MCQ)
-Use for: Paper 1 style, mini-quiz MCQs, any question with fixed options.
-
+// Individual question format blocks — only inject the ones relevant to the subject
+const FORMATS: Record<string, string> = {
+  A: `### FORMAT A: Multiple Choice (MCQ)
 > **Question [number]** *(Multiple Choice — [marks] mark(s))*
->
-> [Question text here]
->
-> - (A) [Option A]
-> - (B) [Option B]
-> - (C) [Option C]
-> - (D) [Option D]
->
-> ✅ **Answer:** ([correct letter]) [brief explanation why]
+> [Question text]
+> - (A) [Option A]  - (B) [Option B]  - (C) [Option C]  - (D) [Option D]
+> ✅ **Answer:** ([correct letter]) [brief explanation]`,
 
----
-
-### FORMAT B: True / False
-Use for: Mini-quiz true/false items, quick concept checks.
-
+  B: `### FORMAT B: True / False
 > **Question [number]** *(True or False)*
->
-> [Statement here]
->
-> ✅ **Answer:** [True/False] — [one-sentence explanation]
+> [Statement]
+> ✅ **Answer:** [True/False] — [one-sentence explanation]`,
 
----
-
-### FORMAT C: Fill in the Blank
-Use for: Mini-quiz fill-ins, vocabulary checks, formula recall.
-
+  C: `### FORMAT C: Fill in the Blank
 > **Question [number]** *(Fill in the Blank)*
->
 > [Sentence with ______ for the blank]
->
-> ✅ **Answer:** [correct word/phrase]
+> ✅ **Answer:** [correct word/phrase]`,
 
----
-
-### FORMAT D: Short Answer / Structured
-Use for: Paper 2 style, exam-style questions requiring a written response.
-
+  D: `### FORMAT D: Short Answer / Structured
 > **Question [number]** *(Short Answer — [marks] marks)*
->
-> [Question text here]
->
-> ✅ **Answer:** [Complete model answer]
+> [Question text]
+> ✅ **Answer:** [Complete model answer]`,
 
----
-
-### FORMAT E: Error Identification / Correction
-Use for: English/writing topics, "spot the mistake" questions.
-
+  E: `### FORMAT E: Error Identification / Correction
 > **Question [number]** *(Error Identification)*
->
-> Find and correct the error(s) in the following:
->
-> *"[Text with error(s)]"*
->
-> ✅ **Answer:** The error is [describe error]. Corrected: *"[Fixed text]"*
+> Find and correct the error(s): *"[Text with error(s)]"*
+> ✅ **Answer:** The error is [describe]. Corrected: *"[Fixed text]"*`,
 
----
-
-### FORMAT F: Rewrite / Transform
-Use for: Grammar, punctuation, sentence combining, formal/informal conversion.
-
+  F: `### FORMAT F: Rewrite / Transform
 > **Question [number]** *(Rewrite)*
->
-> Rewrite the following [with instruction]:
->
-> *"[Original text]"*
->
-> ✅ **Answer:** *"[Rewritten text]"* — [brief note on what changed and why]
+> Rewrite the following [instruction]: *"[Original text]"*
+> ✅ **Answer:** *"[Rewritten text]"* — [brief note on change]`,
 
----
-
-### FORMAT G: Worked Example (Guided Practice)
-Use for: Section 7 guided practice, step-by-step walkthroughs.
-This is the ONLY format where the answer is built up through steps.
-
-> **Worked Example [number]: [Title]** *([Difficulty Level])*
->
-> **Problem:** [State the problem clearly]
->
+  G: `### FORMAT G: Worked Example (Guided Practice)
+> **Worked Example [number]: [Title]** *([Difficulty])*
+> **Problem:** [State problem]
 > **Step 1:** [What to do and WHY]
->
 > **Step 2:** [Next step with reasoning]
->
-> **Step 3:** [Continue as needed...]
->
-> ✅ **Answer:** [Final answer clearly stated]
->
-> 💡 **Key Insight:** [What principle this demonstrates]
+> ✅ **Answer:** [Final answer]
+> 💡 **Key Insight:** [Principle demonstrated]`,
 
----
-
-### FORMAT H: Independent Practice
-Use for: Section 8 practice problems. Present ALL questions first, then ALL answers together.
-
-> **Practice Problem 1** *(Easy)* — [Question text]
->
-> **Practice Problem 2** *(Easy-Medium)* — [Question text]
->
-> **Practice Problem 3** *(Medium)* — [Question text]
->
-> **Practice Problem 4** *(Medium-Hard)* — [Question text]
->
-> **Practice Problem 5** *(Challenge)* — [Question text]
->
+  H: `### FORMAT H: Independent Practice
+> **Practice Problem 1** *(Easy)* — [Question]
+> **Practice Problem 2** *(Easy-Medium)* — [Question]
+> **Practice Problem 3–5** *(Medium→Challenge)* — [Questions]
 > ---
->
-> 📋 **Answer Key:**
-> 1. [Answer with brief explanation]
-> 2. [Answer with brief explanation]
-> 3. [Answer with brief explanation]
-> 4. [Answer with brief explanation]
-> 5. [Answer with brief explanation]
+> 📋 **Answer Key:** 1. [Answer] 2. [Answer] ...`,
 
----
-
-### FORMAT I: Comparison (Correct vs Incorrect)
-Use for: Common mistakes section, showing right vs wrong.
-
+  I: `### FORMAT I: Comparison (Correct vs Incorrect)
 > ❌ **Incorrect:** [wrong version]
->
 > ✅ **Correct:** [right version]
->
-> 💡 **Why:** [explanation of the difference]
+> 💡 **Why:** [explanation]`,
 
----
-
-### FORMAT J: Extended Response
-Use for: Paper 2 extended questions, essay-type questions.
-
+  J: `### FORMAT J: Extended Response
 > **Question [number]** *(Extended Response — [marks] marks)*
->
-> [Full question text with any stimulus material]
->
-> ✅ **Model Answer:**
->
-> [Complete model answer, properly paragraphed]
->
-> 📝 **Examiner Notes:** [What earns full marks, what to avoid]
+> [Full question with stimulus]
+> ✅ **Model Answer:** [Complete answer, properly paragraphed]
+> 📝 **Examiner Notes:** [What earns full marks]`,
+}
 
----
+const ANSWER_RULES = `## ⚠️ MANDATORY ANSWER RULES
+1. Every question MUST have a ✅ Answer — no exceptions
+2. Exam-Style Examples: include answer with each question
+3. Independent Practice: questions first, then Answer Key (FORMAT H)
+4. Mini-Quiz: answer inline using FORMAT A/B/C
+5. Never use "Answer left as exercise" — always provide the answer`
 
-## ⚠️ MANDATORY ANSWER RULES
-1. **Every question MUST have a ✅ Answer** — no exceptions
-2. **Section 6 (Exam-Style Examples):** Include answers with each question using the appropriate format above
-3. **Section 8 (Independent Practice):** Present questions first, then an Answer Key section using FORMAT H
-4. **Section 9 (Mini-Quiz):** Include the answer inline using the appropriate format (A, B, C, or D)
-5. **Section 12 (Extension Tasks):** If tasks have definite answers, provide them; if open-ended, provide guidance on what a good response looks like
-6. Never use "Answer left as exercise" or "Try this yourself" without providing the answer
-`
+/** Subject-filtered format sets — only inject what's needed */
+const STEM_FORMATS = ['A', 'C', 'D', 'G', 'H', 'I', 'J']
+const WRITING_FORMATS = ['A', 'B', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+const GENERAL_FORMATS = ['A', 'B', 'C', 'D', 'G', 'H', 'J']
+
+function getQuestionFormatLibrary(subject: string): string {
+  let keys: string[]
+  if (isSTEMSubject(subject)) keys = STEM_FORMATS
+  else if (isWritingSubject(subject)) keys = WRITING_FORMATS
+  else keys = GENERAL_FORMATS
+
+  const body = keys.map(k => FORMATS[k]).join('\n\n')
+  return `\n## 📐 QUESTION FORMAT LIBRARY (USE THESE EXACT FORMATS)\nNEVER present a question without its answer.\nUse the EXACT Markdown patterns — the rendering engine depends on them.\n\n${body}\n\n${ANSWER_RULES}\n`
+}
+
+// Keep a backward-compatible constant that includes all formats (used nowhere in hot path)
+const QUESTION_FORMAT_LIBRARY = Object.values(FORMATS).join('\n\n---\n\n') + '\n\n' + ANSWER_RULES
 
 /**
  * TextbookLesson - Deep narrative lesson (2000-2500 words)
@@ -548,7 +471,7 @@ For students aiming for Grade I:
 - Format all math clearly using proper notation
 - Use headings, bullets, bold, and whitespace generously
 
-${QUESTION_FORMAT_LIBRARY}${proficiencyContext}${contextSection}`
+${getQuestionFormatLibrary(subject)}${proficiencyContext}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
@@ -661,7 +584,7 @@ For students aiming for Grade I:
 - Include templates and sentence starters the student can adapt
 - Use headings, bullets, bold, and whitespace generously
 
-${QUESTION_FORMAT_LIBRARY}${proficiencyContext}${contextSection}`
+${getQuestionFormatLibrary(subject)}${proficiencyContext}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
@@ -767,7 +690,7 @@ For students aiming for Grade I:
 - Use Caribbean examples, names, and contexts (Trinidad, Jamaica, Barbados, Guyana, Grenada, etc.)
 - Use headings, bullets, bold, and whitespace generously
 
-${QUESTION_FORMAT_LIBRARY}${proficiencyContext}${contextSection}`
+${getQuestionFormatLibrary(subject)}${proficiencyContext}${contextSection}`
 
     const user = `Write a complete, scaffolded lesson on "${topic}" in CSEC ${subject}.
 
@@ -960,22 +883,28 @@ Suggest how to spread studying this topic over multiple sessions. Students shoul
 
 Remember: These students are preparing for the most important exams of their academic lives so far. Give them the deep, thorough preparation they deserve.`
 
+    const openai = getOpenAIClient()
     const startTime = Date.now()
-    const response = await getOpenAIClient().chat.completions.create({
-      model: MODELS.LESSON,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: `CSEC Curriculum Context:\n${contextContent}\n\nGenerate comprehensive coaching for "${topic}" in ${subject} at ${level} level. This is for Caribbean secondary students preparing for CSEC examinations.`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 4000,
-    })
+    const { result: response, model } = await callWithFallback(
+      async (modelToUse) => {
+        return await openai.chat.completions.create({
+          model: modelToUse,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: `CSEC Curriculum Context:\n${contextContent}\n\nGenerate comprehensive coaching for "${topic}" in ${subject} at ${level} level. This is for Caribbean secondary students preparing for CSEC examinations.`
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000,
+        })
+      },
+      'lesson'
+    )
     const latencyMs = Date.now() - startTime
 
-    const usageRecord = extractUsageFromResponse(response, 'stem-coaching', MODELS.LESSON, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'stem-coaching', model, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -1084,22 +1013,28 @@ Suggest a realistic study plan for mastering both the content and writing skills
 
 Remember: Many students struggle with written exams not because they don't know the content, but because they don't know HOW to present it. Teach them both.`
 
+    const openai = getOpenAIClient()
     const startTime = Date.now()
-    const response = await getOpenAIClient().chat.completions.create({
-      model: MODELS.LESSON,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: `CSEC Curriculum Context:\n${contextContent}\n\nGenerate comprehensive coaching for "${topic}" in ${subject} at ${level} level. Focus on both content mastery AND writing skills for Caribbean secondary students preparing for CSEC examinations.`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 4000,
-    })
+    const { result: response, model } = await callWithFallback(
+      async (modelToUse) => {
+        return await openai.chat.completions.create({
+          model: modelToUse,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: `CSEC Curriculum Context:\n${contextContent}\n\nGenerate comprehensive coaching for "${topic}" in ${subject} at ${level} level. Focus on both content mastery AND writing skills for Caribbean secondary students preparing for CSEC examinations.`
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000,
+        })
+      },
+      'lesson'
+    )
     const latencyMs = Date.now() - startTime
 
-    const usageRecord = extractUsageFromResponse(response, 'writing-coaching', MODELS.LESSON, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'writing-coaching', model, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -1148,22 +1083,28 @@ Specific study tips and exam techniques.
 ## STUDY PACING
 How to spread learning across multiple sessions.`
 
+    const openai = getOpenAIClient()
     const startTime = Date.now()
-    const response = await getOpenAIClient().chat.completions.create({
-      model: MODELS.LESSON,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: `CSEC Curriculum Context:\n${contextContent}\n\nGenerate coaching for "${topic}" in ${subject} at ${level} level.`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 4000,
-    })
+    const { result: response, model } = await callWithFallback(
+      async (modelToUse) => {
+        return await openai.chat.completions.create({
+          model: modelToUse,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: `CSEC Curriculum Context:\n${contextContent}\n\nGenerate coaching for "${topic}" in ${subject} at ${level} level.`
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000,
+        })
+      },
+      'lesson'
+    )
     const latencyMs = Date.now() - startTime
 
-    const usageRecord = extractUsageFromResponse(response, 'general-coaching', MODELS.LESSON, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'general-coaching', model, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -1185,7 +1126,7 @@ How to spread learning across multiple sessions.`
       `## ${heading}`,
       `### ${heading}`,
       `${heading}:`,
-      `**${heading}**`
+      `\\*\\*${heading}\\*\\*`
     ]
     
     for (const pattern of headingVariants) {
@@ -1316,25 +1257,32 @@ How to spread learning across multiple sessions.`
 
     const contextContent = pastQuestions.map((item: { content: string }) => item.content).join('\n\n')
 
+    const openai = getOpenAIClient()
     const startTime = Date.now()
-    const response = await getOpenAIClient().chat.completions.create({
-      model: MODELS.LESSON,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: `Context from CSEC past papers:\n${contextContent}\n\nGenerate ${count} practice questions for ${topic} in ${subject}.`
-        }
-      ],
-      temperature: 0.6,
-    })
+    const { result: response, model } = await callWithFallback(
+      async (modelToUse) => {
+        return await openai.chat.completions.create({
+          model: modelToUse,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: `Context from CSEC past papers:\n${contextContent}\n\nGenerate ${count} practice questions for ${topic} in ${subject}.`
+            }
+          ],
+          temperature: 0.6,
+          max_tokens: TOKEN_BUDGETS.practice.output,
+        })
+      },
+      'structured'
+    )
     const latencyMs = Date.now() - startTime
 
     // Track usage asynchronously
-    const usageRecord = extractUsageFromResponse(response, 'practice-questions', MODELS.LESSON, subject, topic)
+    const usageRecord = extractUsageFromResponse(response, 'practice-questions', model, subject, topic)
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 
@@ -1372,25 +1320,32 @@ How to spread learning across multiple sessions.`
 
     const contextContent = examContent.map((item: { content: string }) => item.content).join('\n\n')
 
+    const openai = getOpenAIClient()
     const startTime = Date.now()
-    const response = await getOpenAIClient().chat.completions.create({
-      model: MODELS.LESSON,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: `Context from CSEC materials:\n${contextContent}\n\nGenerate a practice exam for ${subject}.`
-        }
-      ],
-      temperature: 0.5,
-    })
+    const { result: response, model } = await callWithFallback(
+      async (modelToUse) => {
+        return await openai.chat.completions.create({
+          model: modelToUse,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: `Context from CSEC materials:\n${contextContent}\n\nGenerate a practice exam for ${subject}.`
+            }
+          ],
+          temperature: 0.5,
+          max_tokens: TOKEN_BUDGETS.exam.output,
+        })
+      },
+      'structured'
+    )
     const latencyMs = Date.now() - startTime
 
     // Track usage asynchronously
-    const usageRecord = extractUsageFromResponse(response, 'practice-exam', MODELS.LESSON, subject, topics.join(', '))
+    const usageRecord = extractUsageFromResponse(response, 'practice-exam', model, subject, topics.join(', '))
     usageRecord.latency_ms = latencyMs
     trackUsage(usageRecord)
 

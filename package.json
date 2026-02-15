@@ -8,7 +8,6 @@
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
-    "download-content": "npx tsx scripts/download-content.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -17,11 +16,8 @@
     "test-db": "npx tsx scripts/test-connection.ts",
     "test-openrouter": "npx tsx scripts/test-openrouter.ts",
     "populate-vectors": "npx tsx scripts/populate-vectors.ts",
-    "populate-final": "npx tsx scripts/populate-final.ts",
-    "populate-demo": "npx tsx scripts/populate-demo.ts",
     "demo-downloader": "npx tsx scripts/demo-downloader.ts",
-    "populate-db-openrouter": "npx tsx scripts/content-downloader-openrouter.ts",
-    "populate-db": "npm run download-content && echo 'Content populated successfully!'"
+    "ingest": "python scripts/bulk_populate_vectors.py"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",

@@ -26,8 +26,8 @@ describe('Data Models and Types', () => {
     it('should have valid biology topics', () => {
       const biology = CSEC_SUBJECTS.biology
       
-      expect(biology.topics).toContain('Cell Structure')
-      expect(biology.topics).toContain('Genetics')
+      expect(biology.topics).toContain('Structure and Function of Cells')
+      expect(biology.topics).toContain('Genetics and Variation')
       expect(biology.topics).toContain('Ecology')
       expect(biology.topics.length).toBeGreaterThan(5)
     })

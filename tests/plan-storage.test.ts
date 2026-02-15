@@ -44,6 +44,17 @@ jest.mock('@/lib/supabase', () => ({
   },
 }))
 
+// Mock plan-actions server actions (used by savePlan, fetchPlan, fetchPlans via dynamic import)
+const mockSavePlanAction = jest.fn()
+const mockFetchPlanAction = jest.fn()
+const mockFetchPlansAction = jest.fn()
+
+jest.mock('@/lib/plan-actions', () => ({
+  savePlanAction: (...args: any[]) => mockSavePlanAction(...args),
+  fetchPlanAction: (...args: any[]) => mockFetchPlanAction(...args),
+  fetchPlansAction: (...args: any[]) => mockFetchPlansAction(...args),
+}))
+
 // localStorage mock (already provided by tests/setup.ts, but we need
 // working getItem/setItem for these tests)
 const localStore: Record<string, string> = {}
@@ -69,6 +80,10 @@ import {
 function resetLocalStorage() {
   Object.keys(localStore).forEach(k => delete localStore[k])
   jest.clearAllMocks()
+  // Default: server actions throw (simulate Supabase down) so localStorage fallback is used
+  mockSavePlanAction.mockResolvedValue(null)
+  mockFetchPlanAction.mockResolvedValue(null)
+  mockFetchPlansAction.mockResolvedValue([])
 }
 
 function makeChainSuccess(returnData: any) {
@@ -106,21 +121,8 @@ describe('plan-storage: savePlan', () => {
   it('saves to Supabase when DB is available', async () => {
     const dbPlan = { id: 'uuid-123', user_id: 'u1', subject: 'Math', topics: ['Algebra'], status: 'active', created_at: '2026-01-01', updated_at: '2026-01-01' }
 
-    // First call: insert study_plans → success
-    const insertChain: any = {}
-    insertChain.insert = jest.fn(() => insertChain)
-    insertChain.select = jest.fn(() => insertChain)
-    insertChain.single = jest.fn(() => Promise.resolve({ data: dbPlan, error: null }))
-
-    // Second call: insert progress → success
-    const progressChain: any = {}
-    progressChain.insert = jest.fn(() => Promise.resolve({ data: null, error: null }))
-
-    let callCount = 0
-    mockFrom.mockImplementation(() => {
-      callCount++
-      return callCount === 1 ? insertChain : progressChain
-    })
+    // Mock the server action to return a successful plan
+    mockSavePlanAction.mockResolvedValue(dbPlan)
 
     const result = await savePlan({
       user_id: 'u1',
@@ -138,7 +140,8 @@ describe('plan-storage: savePlan', () => {
   })
 
   it('falls back to localStorage when Supabase fails', async () => {
-    mockFrom.mockImplementation(() => makeChainError('Supabase unavailable'))
+    // Server action returns null (DB failure)
+    mockSavePlanAction.mockResolvedValue(null)
 
     const result = await savePlan({
       user_id: 'real-uuid-abc',
@@ -160,7 +163,7 @@ describe('plan-storage: savePlan', () => {
   })
 
   it('preserves wizard_data in localStorage fallback', async () => {
-    mockFrom.mockImplementation(() => makeChainError('DB error'))
+    mockSavePlanAction.mockResolvedValue(null)
 
     const result = await savePlan({
       user_id: 'real-uuid-abc',
@@ -191,7 +194,7 @@ describe('plan-storage: fetchPlan', () => {
 
   it('returns plan from Supabase when available', async () => {
     const dbPlan = { id: 'db-plan-1', user_id: 'u1', subject: 'Chemistry', topics: ['Bonding'] }
-    mockFrom.mockImplementation(() => makeChainSuccess(dbPlan))
+    mockFetchPlanAction.mockResolvedValue(dbPlan)
 
     const result = await fetchPlan('u1', 'db-plan-1')
     expect(result).not.toBeNull()
@@ -204,7 +207,7 @@ describe('plan-storage: fetchPlan', () => {
       { id: 'plan_abc', user_id: 'real-uuid', subject: 'Physics', topics: ['Mechanics'] }
     ])
 
-    mockFrom.mockImplementation(() => makeChainError('400 Bad Request'))
+    mockFetchPlanAction.mockResolvedValue(null)
 
     const result = await fetchPlan('real-uuid', 'plan_abc')
     expect(result).not.toBeNull()
@@ -213,7 +216,7 @@ describe('plan-storage: fetchPlan', () => {
   })
 
   it('returns null when plan not found anywhere', async () => {
-    mockFrom.mockImplementation(() => makeChainError('Not found'))
+    mockFetchPlanAction.mockResolvedValue(null)
     const result = await fetchPlan('u1', 'nonexistent')
     expect(result).toBeNull()
   })
@@ -221,7 +224,7 @@ describe('plan-storage: fetchPlan', () => {
   it('finds localStorage plans created by Supabase-fallback savePlan', async () => {
     // Simulate the exact bounce-back scenario:
     // 1. savePlan fails on Supabase → stores in localStorage
-    mockFrom.mockImplementation(() => makeChainError('400'))
+    mockSavePlanAction.mockResolvedValue(null)
     const saved = await savePlan({
       user_id: 'real-uuid-xyz',
       subject: 'Math',
@@ -247,11 +250,7 @@ describe('plan-storage: fetchPlans', () => {
       { id: '1', user_id: 'u1', subject: 'Math' },
       { id: '2', user_id: 'u1', subject: 'English' },
     ]
-    const c: any = {}
-    c.select = jest.fn(() => c)
-    c.eq = jest.fn(() => c)
-    c.order = jest.fn(() => Promise.resolve({ data: plans, error: null }))
-    mockFrom.mockImplementation(() => c)
+    mockFetchPlansAction.mockResolvedValue(plans)
 
     const result = await fetchPlans('u1')
     expect(result).toHaveLength(2)
@@ -262,11 +261,8 @@ describe('plan-storage: fetchPlans', () => {
       { id: 'plan_a', user_id: 'u2', subject: 'Biology' }
     ])
 
-    const c: any = {}
-    c.select = jest.fn(() => c)
-    c.eq = jest.fn(() => c)
-    c.order = jest.fn(() => Promise.resolve({ data: null, error: { message: '400' } }))
-    mockFrom.mockImplementation(() => c)
+    // Server action returns empty (DB failure)
+    mockFetchPlansAction.mockResolvedValue([])
 
     const result = await fetchPlans('u2')
     expect(result).toHaveLength(1)
@@ -435,7 +431,10 @@ describe('plan-storage: end-to-end localStorage fallback scenario', () => {
   beforeEach(resetLocalStorage)
 
   it('plan created via fallback is retrievable via fallback fetch — preventing the bounce-back bug', async () => {
-    // All Supabase calls fail (simulating the 400 errors seen in production)
+    // All server action calls fail (simulating the 400 errors seen in production)
+    mockSavePlanAction.mockResolvedValue(null)
+    mockFetchPlanAction.mockResolvedValue(null)
+    mockFetchPlansAction.mockResolvedValue([])
     mockFrom.mockImplementation(() => makeChainError('400 Bad Request'))
 
     // Step 1: User creates a plan (Supabase fails → localStorage)

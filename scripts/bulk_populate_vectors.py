@@ -433,10 +433,15 @@ def main():
     print(f"Found {len(pdf_files)} PDF files to process")
     print()
     
-    # Ask about clearing existing content
-    response = input("Clear existing content before populating? (y/N): ").strip().lower()
-    if response == 'y':
+    # Ask about clearing existing content (skip in non-interactive / --no-clear mode)
+    if '--clear' in sys.argv:
         clear_existing_content(supabase)
+    elif '--no-clear' not in sys.argv and sys.stdin.isatty():
+        response = input("Clear existing content before populating? (y/N): ").strip().lower()
+        if response == 'y':
+            clear_existing_content(supabase)
+    else:
+        print("Keeping existing content (non-interactive mode or --no-clear flag)")
     
     # Process PDFs
     all_records = []

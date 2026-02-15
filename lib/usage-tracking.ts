@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
+/** Daily cost budget in USD — requests are rejected once exceeded */
+const DAILY_COST_BUDGET_USD = parseFloat(process.env.DAILY_COST_BUDGET || '10')
+
 export interface UsageRecord {
   user_id?: string
   generation_id?: string
@@ -61,6 +64,60 @@ export async function trackUsage(record: UsageRecord): Promise<void> {
   } catch (error) {
     // Don't let tracking failures affect the main request
     console.error('Usage tracking error:', error)
+  }
+}
+
+/**
+ * Daily cost circuit breaker — checks if today's spend exceeds the budget.
+ * Call this BEFORE making an AI request. If the budget is blown, the caller
+ * should either use the free fallback model or reject the request.
+ *
+ * Returns { allowed, spent, budget }
+ */
+let _dailyBudgetCache: { spent: number; checkedAt: number } | null = null
+const BUDGET_CACHE_TTL_MS = 60_000 // cache for 1 minute
+
+export async function checkDailyBudget(): Promise<{ allowed: boolean; spent: number; budget: number }> {
+  const now = Date.now()
+  if (_dailyBudgetCache && now - _dailyBudgetCache.checkedAt < BUDGET_CACHE_TTL_MS) {
+    return {
+      allowed: _dailyBudgetCache.spent < DAILY_COST_BUDGET_USD,
+      spent: _dailyBudgetCache.spent,
+      budget: DAILY_COST_BUDGET_USD,
+    }
+  }
+
+  const supabase = getServiceClient()
+  if (!supabase) {
+    // Can't check — fail open
+    return { allowed: true, spent: 0, budget: DAILY_COST_BUDGET_USD }
+  }
+
+  try {
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+
+    const { data, error } = await supabase
+      .from('ai_usage')
+      .select('cost_credits')
+      .gte('created_at', todayStart.toISOString())
+
+    if (error) {
+      console.error('[checkDailyBudget] query error:', error)
+      return { allowed: true, spent: 0, budget: DAILY_COST_BUDGET_USD }
+    }
+
+    const spent = (data || []).reduce((sum: number, row: { cost_credits: number }) => sum + (Number(row.cost_credits) || 0), 0)
+    _dailyBudgetCache = { spent, checkedAt: now }
+
+    if (spent >= DAILY_COST_BUDGET_USD) {
+      console.warn(`[checkDailyBudget] Daily budget exceeded: $${spent.toFixed(4)} / $${DAILY_COST_BUDGET_USD}`)
+    }
+
+    return { allowed: spent < DAILY_COST_BUDGET_USD, spent, budget: DAILY_COST_BUDGET_USD }
+  } catch (err) {
+    console.error('[checkDailyBudget] error:', err)
+    return { allowed: true, spent: 0, budget: DAILY_COST_BUDGET_USD }
   }
 }
 

@@ -94,7 +94,7 @@ export default function PracticePage({ params }: { params: Promise<{ id: string;
       // Call the server-side API route for OpenRouter
       const response = await fetch('/api/ai/practice', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(user?.id ? { 'x-user-id': user.id } : {}) },
         body: JSON.stringify({
           subject: plan.subject,
           topic,

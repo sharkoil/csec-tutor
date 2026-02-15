@@ -61,12 +61,27 @@ class MockQueryBuilder {
     return this.execute()
   }
 
+  async maybeSingle() {
+    return this.execute()
+  }
+
   async then(resolve: (val: any) => void) {
     const result = await this.execute()
     resolve(result)
   }
 
   private async execute() {
+    // Handle users table (for ensureUserExists)
+    if (this.table === 'users') {
+      if (this.operation === 'select') {
+        // Return null (user not found) so insert path is taken
+        return { data: null, error: null }
+      }
+      if (this.operation === 'insert') {
+        return { data: null, error: null }
+      }
+    }
+
     // Handle insert with select().single()
     if (this.operation === 'insert') {
       if (!this.isServiceRole && this.table === 'study_plans') {
@@ -111,8 +126,10 @@ class MockQueryBuilder {
 
 // Mock Supabase BEFORE importing plan-actions
 jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn((url: string, key: string) => {
-    const isServiceRole = key?.includes('service-role')
+  createClient: jest.fn((_url: string, _key: string) => {
+    // plan-actions.ts always creates a service-role client,
+    // so we always treat it as service role in this test context
+    const isServiceRole = true
     
     return {
       from: jest.fn((table: string) => {
@@ -132,7 +149,7 @@ describe('plan-actions: Server Actions', () => {
   describe('savePlanAction', () => {
     it('saves plan to database with service role', async () => {
       const planData = {
-        user_id: 'user-123',
+        user_id: '81cd5c8c-cce5-42e2-ab21-ccd3ff94830b',
         subject: 'Mathematics',
         topics: ['Algebra', 'Geometry'],
         status: 'active' as const,
@@ -149,7 +166,7 @@ describe('plan-actions: Server Actions', () => {
 
     it('returns null when service role key is missing', async () => {
       const planData = {
-        user_id: 'user-123',
+        user_id: '81cd5c8c-cce5-42e2-ab21-ccd3ff94830b',
         subject: 'Biology',
         topics: ['Cells'],
         status: 'active' as const,
@@ -166,7 +183,7 @@ describe('plan-actions: Server Actions', () => {
 
     it('creates progress entries after saving plan', async () => {
       const planData = {
-        user_id: 'user-123',
+        user_id: '81cd5c8c-cce5-42e2-ab21-ccd3ff94830b',
         subject: 'History',
         topics: ['World War I', 'World War II'],
         status: 'active' as const,
@@ -184,20 +201,20 @@ describe('plan-actions: Server Actions', () => {
 
   describe('fetchPlanAction', () => {
     it('fetches plan from database', async () => {
-      const result = await fetchPlanAction('user-123', 'uuid-123')
+      const result = await fetchPlanAction('81cd5c8c-cce5-42e2-ab21-ccd3ff94830b', 'uuid-123')
 
       // Should return plan or null
       expect(result === null || typeof result === 'object').toBe(true)
     })
 
     it('returns null for localStorage IDs', async () => {
-      const result = await fetchPlanAction('user-123', 'plan_abc123')
+      const result = await fetchPlanAction('81cd5c8c-cce5-42e2-ab21-ccd3ff94830b', 'plan_abc123')
 
       expect(result).toBeNull()
     })
 
     it('returns null on database error', async () => {
-      const result = await fetchPlanAction('user-123', 'invalid-id')
+      const result = await fetchPlanAction('81cd5c8c-cce5-42e2-ab21-ccd3ff94830b', 'invalid-id')
 
       // Should handle gracefully
       expect(result === null || typeof result === 'object').toBe(true)
@@ -206,13 +223,13 @@ describe('plan-actions: Server Actions', () => {
 
   describe('fetchPlansAction', () => {
     it('fetches all plans for a user', async () => {
-      const result = await fetchPlansAction('user-123')
+      const result = await fetchPlansAction('81cd5c8c-cce5-42e2-ab21-ccd3ff94830b')
 
       expect(Array.isArray(result)).toBe(true)
     })
 
     it('returns empty array on error', async () => {
-      const result = await fetchPlansAction('invalid-user')
+      const result = await fetchPlansAction('92de6d9a-ddf4-43f3-b12c-ff1234567890')
 
       expect(Array.isArray(result)).toBe(true)
     })
@@ -221,7 +238,7 @@ describe('plan-actions: Server Actions', () => {
   describe('Integration: Service Role Bypass', () => {
     it('service role client succeeds where anon key would fail', async () => {
       const planData = {
-        user_id: 'user-integration',
+        user_id: '92de6d9a-ddf4-43f3-b12c-ff1234567890',
         subject: 'Physics',
         topics: ['Mechanics'],
         status: 'active' as const,

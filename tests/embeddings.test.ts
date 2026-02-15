@@ -18,81 +18,63 @@ describe('Embeddings Service', () => {
   })
 
   describe('generateEmbedding', () => {
-    it('should use Voyage AI when API key is available', async () => {
-      process.env.VOYAGE_API_KEY = 'test-voyage-key'
-      
-      const mockEmbedding = new Array(512).fill(0.1)
+    it('should use local /api/embed endpoint', async () => {
+      const mockEmbedding = new Array(384).fill(0.1)
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: [{ embedding: mockEmbedding }]
-        })
+        json: async () => ({ embedding: mockEmbedding })
       })
 
       const { generateEmbedding } = await import('../lib/embeddings')
       const result = await generateEmbedding('test query')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.voyageai.com/v1/embeddings',
+        expect.stringContaining('/api/embed'),
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Authorization': 'Bearer test-voyage-key'
+            'Content-Type': 'application/json'
           })
         })
       )
       expect(result).toEqual(mockEmbedding)
-      expect(result.length).toBe(512)
+      expect(result.length).toBe(384)
     })
 
-    it('should fall back to Jina AI if Voyage fails', async () => {
-      process.env.VOYAGE_API_KEY = 'test-voyage-key'
-      process.env.JINA_API_KEY = 'test-jina-key'
-      
-      const mockEmbedding = new Array(512).fill(0.2)
-      
-      // Voyage fails
+    it('should fall back to pseudo-embedding when /api/embed fails', async () => {
+      // /api/embed fails
       mockFetch.mockResolvedValueOnce({
         ok: false,
-        status: 429,
-        text: async () => 'Rate limited'
-      })
-      
-      // Jina succeeds
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          data: [{ embedding: mockEmbedding }]
-        })
+        status: 500,
+        text: async () => 'Server error'
       })
 
       const { generateEmbedding } = await import('../lib/embeddings')
       const result = await generateEmbedding('test query')
 
-      expect(mockFetch).toHaveBeenCalledTimes(2)
-      expect(result).toEqual(mockEmbedding)
+      // Should fall back to pseudo-embedding (384 dims)
+      expect(result.length).toBe(384)
+      // Should be normalized (magnitude close to 1)
+      const magnitude = Math.sqrt(result.reduce((sum, val) => sum + val * val, 0))
+      expect(magnitude).toBeCloseTo(1, 5)
     })
 
-    it('should use fallback pseudo-embedding when no API keys available', async () => {
-      delete process.env.VOYAGE_API_KEY
-      delete process.env.JINA_API_KEY
-      delete process.env.HUGGINGFACE_API_KEY
-      delete process.env.HF_TOKEN
+    it('should use fallback pseudo-embedding when network errors occur', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'))
 
       const { generateEmbedding } = await import('../lib/embeddings')
       const result = await generateEmbedding('test query for fallback')
 
-      // Should return a 512-dimension embedding
-      expect(result.length).toBe(512)
+      // Should return a 384-dimension embedding
+      expect(result.length).toBe(384)
       // Should be normalized (magnitude close to 1)
       const magnitude = Math.sqrt(result.reduce((sum, val) => sum + val * val, 0))
       expect(magnitude).toBeCloseTo(1, 5)
     })
 
     it('should produce deterministic fallback embeddings for same input', async () => {
-      delete process.env.VOYAGE_API_KEY
-      delete process.env.JINA_API_KEY
-      delete process.env.HUGGINGFACE_API_KEY
+      // Both calls fail to trigger fallback
+      mockFetch.mockRejectedValue(new Error('No endpoint'))
 
       const { generateEmbedding } = await import('../lib/embeddings')
       
@@ -103,9 +85,7 @@ describe('Embeddings Service', () => {
     })
 
     it('should produce different fallback embeddings for different inputs', async () => {
-      delete process.env.VOYAGE_API_KEY
-      delete process.env.JINA_API_KEY
-      delete process.env.HUGGINGFACE_API_KEY
+      mockFetch.mockRejectedValue(new Error('No endpoint'))
 
       const { generateEmbedding } = await import('../lib/embeddings')
       
@@ -116,13 +96,10 @@ describe('Embeddings Service', () => {
     })
 
     it('should truncate text to 2000 characters', async () => {
-      process.env.VOYAGE_API_KEY = 'test-voyage-key'
-      
+      const mockEmbedding = new Array(384).fill(0.1)
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          data: [{ embedding: new Array(512).fill(0.1) }]
-        })
+        json: async () => ({ embedding: mockEmbedding })
       })
 
       const longText = 'a'.repeat(5000)
@@ -130,26 +107,13 @@ describe('Embeddings Service', () => {
       await generateEmbedding(longText)
 
       const calledBody = JSON.parse(mockFetch.mock.calls[0][1].body)
-      expect(calledBody.input[0].length).toBe(2000)
-    })
-
-    it('should handle network errors gracefully', async () => {
-      process.env.VOYAGE_API_KEY = 'test-voyage-key'
-      
-      mockFetch.mockRejectedValueOnce(new Error('Network error'))
-
-      const { generateEmbedding } = await import('../lib/embeddings')
-      const result = await generateEmbedding('test query')
-
-      // Should fall back to pseudo-embedding
-      expect(result.length).toBe(512)
+      expect(calledBody.text.length).toBe(2000)
     })
   })
 
   describe('generateEmbeddings (batch)', () => {
     it('should process multiple texts', async () => {
-      delete process.env.VOYAGE_API_KEY
-      delete process.env.JINA_API_KEY
+      mockFetch.mockRejectedValue(new Error('No endpoint'))
 
       const { generateEmbeddings } = await import('../lib/embeddings')
       const texts = ['text 1', 'text 2', 'text 3']
@@ -157,7 +121,7 @@ describe('Embeddings Service', () => {
 
       expect(results.length).toBe(3)
       results.forEach(embedding => {
-        expect(embedding.length).toBe(512)
+        expect(embedding.length).toBe(384)
       })
     })
   })
@@ -166,8 +130,8 @@ describe('Embeddings Service', () => {
     it('should export correct configuration', async () => {
       const { EMBEDDING_CONFIG } = await import('../lib/embeddings')
 
-      expect(EMBEDDING_CONFIG.dimension).toBe(512)
-      expect(EMBEDDING_CONFIG.model).toContain('voyage-3-lite')
+      expect(EMBEDDING_CONFIG.dimension).toBe(384)
+      expect(EMBEDDING_CONFIG.model).toContain('all-MiniLM-L6-v2')
     })
   })
 })

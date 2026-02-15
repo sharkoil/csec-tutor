@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, it, beforeEach, afterEach } from '@jest/globals'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom'
 import { AuthProvider, useAuth } from '../lib/auth'
-import { supabase } from '../lib/supabase'
 
 // Mock Supabase
 jest.mock('../lib/supabase', () => {
@@ -11,8 +11,10 @@ jest.mock('../lib/supabase', () => {
         signUp: jest.fn(),
         signInWithPassword: jest.fn(),
         signOut: jest.fn(),
-        getUser: jest.fn(),
-        onAuthStateChange: jest.fn()
+        getUser: jest.fn().mockResolvedValue({ data: { user: null }, error: null }),
+        onAuthStateChange: jest.fn().mockReturnValue({
+          data: { subscription: { unsubscribe: jest.fn() } }
+        })
       },
       from: jest.fn().mockReturnThis()
     }

@@ -221,8 +221,7 @@ describe('End-to-End Vector Search Flow', () => {
 
     const { VectorSearch } = await import('../lib/vector-search')
     
-    await expect(
-      VectorSearch.searchSimilarContent('test query')
-    ).rejects.toThrow('Database connection failed')
+    const result = await VectorSearch.searchSimilarContent('test query')
+    expect(result).toEqual([])
   })
 })

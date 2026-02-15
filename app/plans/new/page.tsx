@@ -209,7 +209,7 @@ export default function NewPlanPage() {
     try {
       const response = await fetch('/api/ai/analyze-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(user?.id ? { 'x-user-id': user.id } : {}) },
         body: JSON.stringify({ description, attachments })
       })
       const result = await response.json()
