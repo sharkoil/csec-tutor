@@ -1,0 +1,161 @@
+═══════════════════════════════════════════════════════════════════════════════
+  INVESTIGATION COMPLETE: Mobile vs Desktop Lesson Plan Discrepancy
+═══════════════════════════════════════════════════════════════════════════════
+
+QUESTION: "I noticed that when I login from my mobile vs my desktop I am not 
+          seeing the same lesson plans. Is there a caching issue or rendering 
+          issue?"
+
+ANSWER:   Neither. It's an authentication design issue.
+
+───────────────────────────────────────────────────────────────────────────────
+ROOT CAUSE
+───────────────────────────────────────────────────────────────────────────────
+
+The mock authentication system generates a NEW RANDOM UUID on every login:
+
+  📱 Mobile:  test@example.com → UUID: aaaa-aaaa-aaaa-aaaa
+  💻 Desktop: test@example.com → UUID: bbbb-bbbb-bbbb-bbbb
+                                        ↑
+                                   DIFFERENT!
+
+Your study plans are saved with user_id = aaaa-aaaa on desktop.
+When you login on mobile with user_id = bbbb-bbbb, the system queries:
+
+  SELECT * FROM study_plans WHERE user_id = 'bbbb-bbbb'
+  → Returns: []  (empty - no plans found)
+
+───────────────────────────────────────────────────────────────────────────────
+IS THIS A BUG?
+───────────────────────────────────────────────────────────────────────────────
+
+NO. This is working as designed for development/testing mode.
+
+The mock authentication in lib/auth.tsx was built for local development, not
+production use. It intentionally creates simple, temporary user sessions that
+don't persist across devices.
+
+───────────────────────────────────────────────────────────────────────────────
+IMPACT
+───────────────────────────────────────────────────────────────────────────────
+
+🔴 HIGH: Cannot access study plans across different devices
+🔴 HIGH: Cannot access study plans after signing out and back in
+💰 MEDIUM: Wastes AI credits by regenerating cached lessons
+😕 HIGH: Confusing user experience - data appears to "vanish"
+
+───────────────────────────────────────────────────────────────────────────────
+AFFECTED COMPONENTS
+───────────────────────────────────────────────────────────────────────────────
+
+1. Authentication (lib/auth.tsx)
+   - Lines 164-226: signUp() and signIn() generate random UUIDs
+   - Each login = new UUID = new user identity
+
+2. Plan Storage (lib/plan-storage.ts)
+   - Lines 97-145: Fetches plans by user_id
+   - Different UUID = different user = no plans found
+
+3. Lesson Caching (app/api/ai/coaching/route.ts)
+   - Lines 44-74: Retrieves cached lessons by user_id
+   - Different UUID = cache miss = regenerate lesson
+
+4. Browser Storage
+   - localStorage is device-specific (cannot sync)
+   - Each browser has completely separate storage
+
+───────────────────────────────────────────────────────────────────────────────
+SOLUTION OPTIONS
+───────────────────────────────────────────────────────────────────────────────
+
+OPTION 1: Deterministic UUID from Email (Quick Fix) ⭐ RECOMMENDED
+─────────────────────────────────────────────────────────────────
+Change UUID generation to be deterministic:
+
+  email → hash(email) → format as UUID → always the same result
+  
+  test@example.com → sha256 → a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  test@example.com → sha256 → a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                               ↑ 
+                          SAME UUID!
+
+Pros:
+  ✅ Minimal code changes (one function in lib/auth.tsx)
+  ✅ Works immediately
+  ✅ Same email = same UUID everywhere
+  ✅ Compatible with existing dual-backend storage
+
+Cons:
+  ⚠️ Existing users need migration
+  ⚠️ Not cryptographically secure (acceptable for mock auth)
+
+OPTION 2: Enable Real Supabase Authentication (Proper Fix)
+──────────────────────────────────────────────────────────
+Remove mock auth entirely, use production-ready Supabase auth:
+
+Pros:
+  ✅ Production-ready with all security features
+  ✅ Built-in cross-device session management
+  ✅ No need for mock UUIDs
+
+Cons:
+  ⚠️ Requires Supabase configuration
+  ⚠️ No offline/local development mode
+
+───────────────────────────────────────────────────────────────────────────────
+INVESTIGATION DOCUMENTS
+───────────────────────────────────────────────────────────────────────────────
+
+Four comprehensive documents have been created:
+
+1. INVESTIGATION_SUMMARY.md (3KB)
+   → Quick TL;DR for developers
+
+2. INVESTIGATION_MOBILE_VS_DESKTOP.md (15KB)
+   → Complete technical analysis with evidence
+   → Code snippets with line numbers
+   → Impact assessment
+   → Solution comparison
+
+3. INVESTIGATION_FLOW_DIAGRAM.md (17KB)
+   → Visual flow diagrams
+   → Before/after comparisons
+   → Data flow illustrations
+
+4. tests/investigation-demo.test.ts (7KB)
+   → Runnable demonstration tests
+   → Shows the problem and solution
+   → Can be used for validation
+
+───────────────────────────────────────────────────────────────────────────────
+KEY TAKEAWAYS
+───────────────────────────────────────────────────────────────────────────────
+
+✅ This is NOT a caching issue
+✅ This is NOT a rendering issue
+✅ This is NOT a bug
+
+⚠️ This is a design limitation of mock authentication
+⚠️ Mock auth generates random UUIDs each login
+⚠️ Study plans are tied to the UUID
+⚠️ Different UUID = can't find the plans
+
+🎯 Fix: Make UUIDs deterministic from email address
+   OR: Use proper Supabase authentication
+
+───────────────────────────────────────────────────────────────────────────────
+NEXT STEPS
+───────────────────────────────────────────────────────────────────────────────
+
+1. Review the investigation documents
+2. Decide on approach:
+   - Quick fix: Deterministic UUID
+   - Proper fix: Enable Supabase auth
+   - Keep as-is: Document limitation
+3. If fixing, plan user migration strategy
+4. Update documentation/warnings for users
+
+───────────────────────────────────────────────────────────────────────────────
+INVESTIGATION COMPLETED: 2026-02-16
+NO CODE CHANGES MADE (as requested - investigation only)
+───────────────────────────────────────────────────────────────────────────────
